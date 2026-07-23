@@ -1,0 +1,138 @@
+{
+  "source": "2026-07-17 v0.5 integration test",
+  "items": [
+    {
+      "key": "grammar:〜のに",
+      "type": "grammar",
+      "display": "のに",
+      "level": "N4",
+      "review_group": "逆接",
+      "aliases": [
+        "なのに"
+      ],
+      "suggested": true,
+      "senses": [
+        {
+          "meaning": "普通形＋のに：明明……卻……",
+          "example_ja": "雨が降っているのに、出かけました。",
+          "example_zh": "明明正在下雨，卻還是出門了。"
+        }
+      ],
+      "related_grammar": [
+        {
+          "key": "grammar:ので",
+          "relation": "容易混淆",
+          "note": "ので表示原因；のに表示與預期相反的結果。"
+        },
+        {
+          "key": "grammar:くせに",
+          "relation": "語氣比較",
+          "note": "くせに通常帶有更強的不滿或責備。"
+        }
+      ]
+    },
+    {
+      "key": "grammar:ので",
+      "type": "grammar",
+      "display": "ので",
+      "level": "N4",
+      "review_group": "原因與逆接",
+      "senses": [
+        {
+          "meaning": "普通形＋ので：因為……",
+          "example_ja": "雨が降っているので、出かけません。",
+          "example_zh": "因為正在下雨，所以不出門。"
+        }
+      ]
+    },
+    {
+      "key": "grammar:ことがある",
+      "type": "grammar",
+      "display": "ことがある",
+      "level": "N4",
+      "review_group": "経験",
+      "aliases": [
+        "ことがあります"
+      ],
+      "suggested": true,
+      "senses": [
+        {
+          "meaning": "動詞た形＋ことがある：曾經有過……的經驗",
+          "example_ja": "日本へ行ったことがあります。",
+          "example_zh": "我曾經去過日本。"
+        }
+      ]
+    },
+    {
+      "key": "vocab:アルバイト",
+      "type": "vocabulary",
+      "display": "アルバイト",
+      "reading": "アルバイト",
+      "romaji": "a ru ba i to",
+      "level": "N4",
+      "origin_type": "loanword",
+      "origin_language": "德語",
+      "origin_word": "Arbeit",
+      "origin_note": "日語中主要指打工或兼職。",
+      "meanings": [
+        "打工、兼職"
+      ]
+    },
+    {
+      "key": "vocab:教室",
+      "type": "vocabulary",
+      "display": "教室",
+      "reading": "きょうしつ",
+      "level": "N5",
+      "meanings": [
+        "教室"
+      ]
+    }
+  ],
+  "attempts": [
+    {
+      "question_type": "reorder_4",
+      "date": "2026-07-17",
+      "source": "TRY! N4",
+      "section": "總練習",
+      "question": "第1題",
+      "prompt": "私は＿＿＿＿＿＿＿＿あります。",
+      "before": "私は",
+      "parts": [
+        {
+          "id": 1,
+          "text": "ことが"
+        },
+        {
+          "id": 2,
+          "text": "日本へ"
+        },
+        {
+          "id": 3,
+          "text": "あります"
+        },
+        {
+          "id": 4,
+          "text": "行った"
+        }
+      ],
+      "after": "。",
+      "user_order": [
+        2,
+        1,
+        4,
+        3
+      ],
+      "correct_order": [
+        2,
+        4,
+        1,
+        3
+      ],
+      "reason": "完整順序中把ことが放得太早。",
+      "linked_entries": [
+        "grammar:ことがある"
+      ]
+    }
+  ]
+}
