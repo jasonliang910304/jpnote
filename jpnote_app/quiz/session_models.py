@@ -136,6 +136,21 @@ class QuizSessionSummary:
 
 
 @dataclass(frozen=True, slots=True)
+class QuizPruneResult:
+    """Result of enforcing the detailed-history storage cap."""
+
+    cap_bytes: int
+    detail_bytes_before: int
+    detail_bytes_after: int
+    protected_detail_bytes: int
+    pruned_session_ids: tuple[str, ...]
+
+    @property
+    def cap_satisfied(self) -> bool:
+        return self.detail_bytes_after <= self.cap_bytes
+
+
+@dataclass(frozen=True, slots=True)
 class QuizSessionSnapshot:
     summary: QuizSessionSummary
     questions: tuple[QuestionEventSnapshot, ...]

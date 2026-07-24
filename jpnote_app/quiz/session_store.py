@@ -11,7 +11,7 @@ import os
 import sqlite3
 import uuid
 from collections.abc import Callable, Sequence
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +21,7 @@ from .session_models import (
     QUESTION_RESULTS,
     QuestionChoiceSnapshot,
     QuestionEventSnapshot,
+    QuizPruneResult,
     QuizSessionSnapshot,
     QuizSessionSummary,
     QuizValidationError,
@@ -29,6 +30,24 @@ from .session_models import (
 )
 
 QUIZ_SCHEMA_VERSION = 1
+QUIZ_HISTORY_EXPORT_VERSION = 1
+DEFAULT_DETAIL_CAP_BYTES = 100 * 1024 * 1024
+
+_DETAIL_SIZE_EXPRESSION = """
+    LENGTH(CAST(q.question_event_id AS BLOB))
+    + LENGTH(CAST(q.session_id AS BLOB))
+    + LENGTH(CAST(q.position AS BLOB))
+    + LENGTH(CAST(q.question_type AS BLOB))
+    + LENGTH(CAST(q.generator_version AS BLOB))
+    + LENGTH(CAST(q.source_kind AS BLOB))
+    + LENGTH(CAST(q.source_key AS BLOB))
+    + LENGTH(CAST(q.prompt AS BLOB))
+    + LENGTH(CAST(q.choices_json AS BLOB))
+    + LENGTH(CAST(q.correct_answer_json AS BLOB))
+    + LENGTH(CAST(COALESCE(q.user_answer_json, '') AS BLOB))
+    + LENGTH(CAST(COALESCE(q.result, '') AS BLOB))
+    + LENGTH(CAST(COALESCE(q.answered_at, '') AS BLOB))
+"""
 
 
 class QuizStorageError(RuntimeError):
@@ -378,6 +397,419 @@ class QuizSessionStore:
             raise QuizStorageUnavailableError(f"無法讀取 Quiz history：{exc}") from exc
         finally:
             conn.close()
+
+    def detail_storage_bytes(self) -> int:
+        """Return the stored byte size of immutable question-event details."""
+
+        conn = self._connect()
+        try:
+            return self._detail_bytes(conn)
+        except sqlite3.Error as exc:
+            raise QuizStorageUnavailableError(
+                f"無法計算 Quiz history detail 大小：{exc}"
+            ) from exc
+        finally:
+            conn.close()
+
+    def prune_details(
+        self, *, cap_bytes: int = DEFAULT_DETAIL_CAP_BYTES
+    ) -> QuizPruneResult:
+        """Prune oldest terminal-session details while retaining summaries.
+
+        Active, paused and interrupted sessions remain fully resumable and are
+        never selected.  If their protected details alone exceed the cap, the
+        result reports ``cap_satisfied=False`` rather than damaging a session.
+        """
+
+        if (
+            isinstance(cap_bytes, bool)
+            or not isinstance(cap_bytes, int)
+            or cap_bytes < 0
+        ):
+            raise QuizValidationError("cap_bytes 必須是非負整數")
+
+        conn = self._connect()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            before = self._detail_bytes(conn)
+            protected = self._detail_bytes(
+                conn,
+                where="s.state NOT IN ('completed','abandoned')",
+            )
+            current = before
+            pruned: list[str] = []
+
+            if current > cap_bytes:
+                rows = conn.execute(
+                    f"""
+                    SELECT s.session_id,
+                           COALESCE(SUM({_DETAIL_SIZE_EXPRESSION}), 0) AS detail_bytes
+                    FROM quiz_sessions AS s
+                    JOIN quiz_question_events AS q
+                      ON q.session_id = s.session_id
+                    WHERE s.state IN ('completed','abandoned')
+                      AND s.details_pruned = 0
+                    GROUP BY s.session_id
+                    ORDER BY COALESCE(s.ended_at, s.updated_at) ASC,
+                             s.started_at ASC,
+                             s.session_id ASC
+                    """
+                ).fetchall()
+                for row in rows:
+                    if current <= cap_bytes:
+                        break
+                    session_id = str(row["session_id"])
+                    detail_bytes = int(row["detail_bytes"])
+                    conn.execute(
+                        "DELETE FROM quiz_question_events WHERE session_id=?",
+                        (session_id,),
+                    )
+                    conn.execute(
+                        """
+                        UPDATE quiz_sessions SET details_pruned=1
+                        WHERE session_id=? AND state IN ('completed','abandoned')
+                        """,
+                        (session_id,),
+                    )
+                    current = max(0, current - detail_bytes)
+                    pruned.append(session_id)
+
+            after = self._detail_bytes(conn)
+            conn.commit()
+            return QuizPruneResult(
+                cap_bytes=cap_bytes,
+                detail_bytes_before=before,
+                detail_bytes_after=after,
+                protected_detail_bytes=protected,
+                pruned_session_ids=tuple(pruned),
+            )
+        except sqlite3.Error as exc:
+            conn.rollback()
+            raise QuizStorageUnavailableError(
+                f"無法清理 Quiz history details：{exc}"
+            ) from exc
+        finally:
+            conn.close()
+
+    def export_history(
+        self,
+        *,
+        session_id: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        include_abandoned: bool = True,
+    ) -> dict[str, Any]:
+        """Return a stable JSON-ready history export.
+
+        Pruned details are represented explicitly as ``status='pruned'`` and
+        never reconstructed from mutable core data.
+        """
+
+        if session_id is not None and (
+            start_date is not None or end_date is not None
+        ):
+            raise QuizValidationError("單一 session export 不可同時使用日期篩選")
+        start = self._validate_export_date(start_date, name="start_date")
+        end = self._validate_export_date(end_date, name="end_date")
+        if start is not None and end is not None and start > end:
+            raise QuizValidationError("start_date 不可晚於 end_date")
+
+        clauses: list[str] = []
+        params: list[object] = []
+        if session_id is not None:
+            if not session_id.strip():
+                raise QuizValidationError("session_id 不可為空")
+            clauses.append("session_id=?")
+            params.append(session_id)
+        else:
+            if start is not None:
+                clauses.append("substr(started_at, 1, 10) >= ?")
+                params.append(start.isoformat())
+            if end is not None:
+                clauses.append("substr(started_at, 1, 10) <= ?")
+                params.append(end.isoformat())
+            if not include_abandoned:
+                clauses.append("state <> 'abandoned'")
+        where = "" if not clauses else "WHERE " + " AND ".join(clauses)
+
+        conn = self._connect()
+        try:
+            session_rows = conn.execute(
+                f"""
+                SELECT * FROM quiz_sessions
+                {where}
+                ORDER BY started_at ASC, session_id ASC
+                """,
+                tuple(params),
+            ).fetchall()
+            if session_id is not None and not session_rows:
+                raise QuizSessionNotFoundError(f"找不到 Quiz session：{session_id}")
+
+            sessions: list[dict[str, Any]] = []
+            for row in session_rows:
+                summary = self._summary_from_row(row)
+                question_rows = conn.execute(
+                    """
+                    SELECT * FROM quiz_question_events
+                    WHERE session_id=? ORDER BY position
+                    """,
+                    (summary.session_id,),
+                ).fetchall()
+                questions = tuple(
+                    self._question_from_row(item) for item in question_rows
+                )
+                sessions.append(self._session_to_export(summary, questions))
+
+            return {
+                "format": "jpnote-quiz-history",
+                "version": QUIZ_HISTORY_EXPORT_VERSION,
+                "exported_at": self._clock(),
+                "filters": {
+                    "session_id": session_id,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "include_abandoned": include_abandoned,
+                },
+                "sessions": sessions,
+            }
+        except QuizSessionNotFoundError:
+            raise
+        except sqlite3.Error as exc:
+            raise QuizStorageUnavailableError(f"無法匯出 Quiz history：{exc}") from exc
+        finally:
+            conn.close()
+
+    def write_history_json(
+        self,
+        path: str | Path,
+        *,
+        session_id: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        include_abandoned: bool = True,
+    ) -> Path:
+        """Atomically write a private-permission JSON history export."""
+
+        destination = Path(path).expanduser()
+        payload = self.export_history(
+            session_id=session_id,
+            start_date=start_date,
+            end_date=end_date,
+            include_abandoned=include_abandoned,
+        )
+        temporary = destination.with_name(
+            f".{destination.name}.pending-{uuid.uuid4().hex}"
+        )
+        try:
+            if destination.parent.exists():
+                if not destination.parent.is_dir():
+                    raise OSError("export parent 不是目錄")
+            else:
+                _secure_directory(destination.parent)
+            with temporary.open("x", encoding="utf-8") as handle:
+                json.dump(
+                    payload,
+                    handle,
+                    ensure_ascii=False,
+                    indent=2,
+                    sort_keys=True,
+                )
+                handle.write("\n")
+                handle.flush()
+                os.fsync(handle.fileno())
+            _secure_file(temporary)
+            os.replace(temporary, destination)
+            _secure_file(destination)
+            return destination
+        except (OSError, TypeError, ValueError) as exc:
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                pass
+            raise QuizStorageUnavailableError(
+                f"無法寫入 Quiz history JSON：{exc}"
+            ) from exc
+
+    def delete_session(
+        self, session_id: str, *, include_resumable: bool = False
+    ) -> QuizSessionSummary:
+        """Delete one history record, protecting resumable sessions by default."""
+
+        conn = self._connect()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                "SELECT * FROM quiz_sessions WHERE session_id=?", (session_id,)
+            ).fetchone()
+            if row is None:
+                raise QuizSessionNotFoundError(f"找不到 Quiz session：{session_id}")
+            summary = self._summary_from_row(row)
+            if (
+                summary.state not in TERMINAL_SESSION_STATES
+                and not include_resumable
+            ):
+                raise QuizSessionStateError(
+                    f"session {summary.state} 仍可恢復；刪除時必須明確允許 resumable"
+                )
+            conn.execute(
+                "DELETE FROM quiz_sessions WHERE session_id=?",
+                (session_id,),
+            )
+            conn.commit()
+            return summary
+        except (QuizSessionNotFoundError, QuizSessionStateError):
+            conn.rollback()
+            raise
+        except sqlite3.Error as exc:
+            conn.rollback()
+            raise QuizStorageUnavailableError(f"無法刪除 Quiz history：{exc}") from exc
+        finally:
+            conn.close()
+
+    def delete_all_history(
+        self, *, include_resumable: bool = False
+    ) -> tuple[str, ...]:
+        """Delete all terminal history, or everything when explicitly requested."""
+
+        where = (
+            ""
+            if include_resumable
+            else "WHERE state IN ('completed','abandoned')"
+        )
+        conn = self._connect()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            rows = conn.execute(
+                f"""
+                SELECT session_id FROM quiz_sessions
+                {where}
+                ORDER BY started_at, session_id
+                """
+            ).fetchall()
+            session_ids = tuple(str(row["session_id"]) for row in rows)
+            if session_ids:
+                placeholders = ",".join("?" for _ in session_ids)
+                conn.execute(
+                    f"DELETE FROM quiz_sessions WHERE session_id IN ({placeholders})",
+                    session_ids,
+                )
+            conn.commit()
+            return session_ids
+        except sqlite3.Error as exc:
+            conn.rollback()
+            raise QuizStorageUnavailableError(f"無法刪除 Quiz history：{exc}") from exc
+        finally:
+            conn.close()
+
+    @staticmethod
+    def _validate_export_date(raw: str | None, *, name: str) -> date | None:
+        if raw is None:
+            return None
+        try:
+            return date.fromisoformat(raw)
+        except (TypeError, ValueError) as exc:
+            raise QuizValidationError(f"{name} 必須是 YYYY-MM-DD") from exc
+
+    @staticmethod
+    def _detail_bytes(
+        conn: sqlite3.Connection, *, where: str | None = None
+    ) -> int:
+        join = (
+            ""
+            if where is None
+            else "JOIN quiz_sessions AS s ON s.session_id=q.session_id"
+        )
+        clause = "" if where is None else f"WHERE {where}"
+        row = conn.execute(
+            f"""
+            SELECT COALESCE(SUM({_DETAIL_SIZE_EXPRESSION}), 0) AS detail_bytes
+            FROM quiz_question_events AS q
+            {join}
+            {clause}
+            """
+        ).fetchone()
+        return int(row["detail_bytes"])
+
+    @staticmethod
+    def _summary_to_export(summary: QuizSessionSummary) -> dict[str, Any]:
+        return {
+            "session_id": summary.session_id,
+            "mode": summary.mode,
+            "requested_count": summary.requested_count,
+            "question_count": summary.question_count,
+            "state": summary.state,
+            "answered_count": summary.answered_count,
+            "correct_count": summary.correct_count,
+            "incorrect_count": summary.incorrect_count,
+            "skipped_count": summary.skipped_count,
+            "effective_incorrect_count": summary.effective_incorrect_count,
+            "accuracy": summary.accuracy,
+            "details_pruned": summary.details_pruned,
+            "created_at": summary.created_at,
+            "updated_at": summary.updated_at,
+            "started_at": summary.started_at,
+            "ended_at": summary.ended_at,
+        }
+
+    @staticmethod
+    def _question_to_export(question: QuestionEventSnapshot) -> dict[str, Any]:
+        return {
+            "question_event_id": question.question_event_id,
+            "session_id": question.session_id,
+            "position": question.position,
+            "question": {
+                "question_type": question.question.question_type,
+                "generator_version": question.question.generator_version,
+                "source_kind": question.question.source_kind,
+                "source_key": question.question.source_key,
+                "prompt": question.question.prompt,
+                "choices": [
+                    {"choice_id": choice.choice_id, "text": choice.text}
+                    for choice in question.question.choices
+                ],
+                "correct_answer": {
+                    "answer_id": question.question.correct_answer.answer_id,
+                    "text": question.question.correct_answer.text,
+                },
+            },
+            "user_answer": (
+                None
+                if question.user_answer is None
+                else {
+                    "answer_id": question.user_answer.answer_id,
+                    "text": question.user_answer.text,
+                }
+            ),
+            "result": question.result,
+            "answered_at": question.answered_at,
+        }
+
+    @classmethod
+    def _session_to_export(
+        cls,
+        summary: QuizSessionSummary,
+        questions: Sequence[QuestionEventSnapshot],
+    ) -> dict[str, Any]:
+        if summary.details_pruned and questions:
+            raise QuizStorageUnavailableError(
+                "Quiz history 標記為 pruned，但仍存在 question details"
+            )
+        if not summary.details_pruned and len(questions) != summary.question_count:
+            raise QuizStorageUnavailableError(
+                "Quiz history details 不完整，拒絕產生可能誤導的 export"
+            )
+        detail_status = "pruned" if summary.details_pruned else "available"
+        return {
+            "summary": cls._summary_to_export(summary),
+            "details": {
+                "status": detail_status,
+                "questions": (
+                    []
+                    if summary.details_pruned
+                    else [cls._question_to_export(question) for question in questions]
+                ),
+            },
+        }
 
     def next_question(self, session_id: str) -> QuestionEventSnapshot | None:
         conn = self._connect()
