@@ -16,6 +16,7 @@ from jpnote_app.study_sources import (
     EntrySnapshot,
     QuestionSourceReader,
     QuestionSourceUnavailableError,
+    SourceCatalog,
 )
 
 from .question_pool import QUIZ_MODES, QuestionPoolBuilder, QuestionPoolPlan
@@ -163,6 +164,18 @@ class QuizService:
     @property
     def session_store(self) -> QuizSessionStore:
         return self._session_store
+
+    def source_catalog(self) -> SourceCatalog:
+        """Return filter metadata through the stable public reader contract."""
+
+        return self._source_reader.source_catalog()
+
+    def list_recent_sessions(
+        self, *, limit: int = 20
+    ) -> tuple[QuizSessionSummary, ...]:
+        """Return recent Quiz summaries for the TUI history browser."""
+
+        return self._session_store.list_recent_sessions(limit=limit)
 
     def plan_session(
         self,

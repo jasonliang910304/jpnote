@@ -191,7 +191,7 @@ class QuizCliConfigTests(unittest.TestCase):
         self.assertEqual(controller.state.mode, "mistake")
         self.assertEqual(controller.state.requested_count, 15)
         rendered = "\n".join(controller.render(100, 30).lines)
-        self.assertIn("JLPT：N3、N4", rendered)
+        self.assertIn("JLPT：N4、N3", rendered)
         self.assertIn("來源：TRY! N3", rendered)
         controller.handle_key("ENTER")
         controller.handle_key("ENTER")
@@ -200,7 +200,7 @@ class QuizCliConfigTests(unittest.TestCase):
         call = service.start_calls[0]
         self.assertEqual(call["mode"], "mistake")
         self.assertEqual(call["requested_count"], 15)
-        self.assertEqual(call["levels"], ("N3", "N4"))
+        self.assertEqual(call["levels"], ("N4", "N3"))
         self.assertEqual(call["sources"], ("TRY! N3",))
 
     def test_tui_run_prunes_with_configured_cap_even_after_wrapper_returns(self) -> None:

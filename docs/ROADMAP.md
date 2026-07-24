@@ -2,14 +2,14 @@
 
 最後更新：2026-07-24（Asia/Taipei）
 正式 release 基準：v0.6.6.4
-目前開發位置：Quiz Phase 5 正式 CLI／config foundation 完成；下一步為互動式篩選／history 與安裝整合
+目前開發位置：Quiz Phase 5 互動式篩選／history navigation 完成；下一步為安裝整合與 release readiness
 
 ## 已通過的前置 gate
 
 - v0.6.6.4 stability gate：通過。
 - core schema 維持 v5。
 - Quiz 採獨立 `quiz.db`，目前 schema v2。
-- 最新完整 regression：`355 passed, 18 subtests passed`。
+- 最新完整 regression：`365 passed, 18 subtests passed`。
 
 ## Phase 1：Quiz 契約與隔離骨架 — 完成
 
@@ -63,19 +63,27 @@
 - CLI single-session overrides：mode/count/level/source。
 - TUI 顯示已套用 filters，並依 config 執行 session 後 pruning。
 
-### 下一個 checkpoint：互動式篩選／history 與安裝整合
+### 互動式篩選／history navigation — 完成
 
-1. TUI 內 JLPT/source 多選畫面。
-2. TUI recent/history/resume 入口。
-3. wrong/skipped filter 與 abandoned label/hide filter。
-4. shortage confirmation 正式互動畫面。
-5. source-tree／installed-command／installer package smoke。
+- stable source catalog 驅動的 JLPT/source 多選畫面。
+- recent history summaries 與 session result details。
+- active/paused/interrupted session 可從 history 繼續。
+- wrong/skipped-only filter 與 abandoned show/hide filter。
+- 題庫不足確認畫面維持既有安全縮減流程。
+- setup Enter 流程仍為「模式 → 題數 → 開始」，filters/history 使用明確快捷鍵與滑鼠目標。
+
+### 下一個 checkpoint：安裝整合與 release readiness
+
+1. source-tree command smoke。
+2. 隔離安裝前綴的 installer/package smoke。
+3. installed `jpnote quiz` 與 core failure-isolation smoke。
+4. 使用者文件、release checklist、coverage/health-check 同步。
+5. 確認 history per-question/export/delete 的 v1 最終範圍。
 
 ### Phase 5 後續
 
 - TUI history per-question view。
-- wrong/skipped filter。
-- abandoned label/hide filter。
+- history export/delete TUI 入口。
 - fresh install/upgrade smoke。
 - v0.7.0 release audit、coverage、docs 與 artifacts。
 

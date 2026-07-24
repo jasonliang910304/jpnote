@@ -2,7 +2,7 @@
 
 最後更新：2026-07-24（Asia/Taipei）
 正式 release 基準：`jpnote v0.6.6.4`
-目前開發 checkpoint：Quiz Phase 5 正式 CLI／config foundation 完成
+目前開發 checkpoint：Quiz Phase 5 互動式篩選／history navigation 完成
 
 用途：讓新的 ChatGPT 對話或新的開發工作階段，不依賴舊聊天內容也能直接接續工作。
 
@@ -26,13 +26,13 @@
 2. Phase 2：獨立 `quiz.db`、session/history、pause/resume/abandon、100 MiB detail retention、JSON export。
 3. Phase 3：安全 generators、distractor/fallback、question pool、mixed/vocabulary/mistake modes。
 4. Phase 4：headless service/debug adapter、lifecycle recovery、source detail feedback、Quiz schema v2。
-5. Phase 5：Python-native curses TUI、第一輪 usability/question-quality 修正，以及正式 `jpnote quiz` CLI／config foundation。
+5. Phase 5：Python-native curses TUI、usability/question-quality、正式 `jpnote quiz` CLI／config，以及互動式 JLPT/source filters 與 history navigation。
 
 目前已驗證：
 
 ```text
 python -m compileall -q jpnote_app tests    PASS
-pytest -q                                  355 passed, 18 subtests passed
+pytest -q                                  365 passed, 18 subtests passed
 bash -n install.sh                          PASS
 git diff --check                           PASS
 ```
@@ -84,22 +84,25 @@ Quiz history 不寫入既有教材 `attempts`。
 - 正式 `jpnote quiz` 透過 lazy loader 啟動；Quiz import/runtime failure 不阻止其他 core CLI 指令。
 - config 支援預設 mode/count、JLPT levels、sources、透明背景、history detail cap 與 session 後 pruning。
 - CLI 可用 `--mode`、`--count`、`--level`、`--source` 覆寫單次 Quiz 設定。
+- TUI 內可用多選畫面調整 JLPT／來源條件；空選擇代表全部。
+- TUI history 可瀏覽 recent summaries、查看結果摘要、繼續未完成 session。
+- history 可切換僅顯示答錯／跳過紀錄，並顯示或隱藏 abandoned session。
 
 ---
 
 ## 3. 下一個正確工作項目
 
-### Phase 5 互動式篩選／history 與安裝整合
+### Phase 5 安裝整合與 release readiness
 
 下一個 checkpoint 應完成：
 
-1. TUI 內互動式 JLPT level 與 source 多選畫面。
-2. TUI recent/history/resume 入口，以及 wrong/skipped／abandoned 顯示與篩選。
-3. 題庫不足的正式互動確認畫面。
-4. `jpnote quiz` source-tree、installed-command 與 package/install smoke。
-5. 同步使用者文件與 release readiness；暫不建立正式 `v0.7.0` tag。
+1. source-tree `python -m jpnote_app quiz` smoke。
+2. 使用隔離安裝前綴的 installer/package smoke。
+3. installed `jpnote quiz`、core command 與 Quiz failure-isolation smoke。
+4. TUI history per-question view、export/delete 入口是否納入 v1 的最後範圍確認。
+5. 同步 README、USER_GUIDE、CHANGELOG、release checklist 與 health-check；暫不建立正式 `v0.7.0` tag。
 
-負分／猜題扣分屬後期 optional scoring backlog，不阻塞 v1。
+進行正式安裝／升級 smoke 前，必須先明確提醒使用者短暫停止日常資料匯入。負分／猜題扣分仍屬後期 optional scoring backlog，不阻塞 v1。
 
 ---
 
@@ -135,9 +138,7 @@ jpnote browse
 
 ### Quiz v1 尚待完成
 
-- TUI 內互動式 JLPT/source filters。
-- TUI history 瀏覽、wrong/skipped filter、abandoned hide filter。
-- 題庫不足正式確認畫面。
+- TUI history per-question view，以及 export/delete 是否納入首版的最後決策。
 - 正式安裝／升級流程與 package smoke。
 - release 文件、coverage、fresh install/upgrade smoke、真實 DB 副本驗證。
 

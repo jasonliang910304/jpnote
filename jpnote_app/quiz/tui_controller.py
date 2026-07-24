@@ -21,6 +21,13 @@ from .service import (
     QuizStartResult,
 )
 from .session_models import QuestionEventSnapshot, QuizSessionSummary
+from .tui_menus import (
+    can_resume,
+    normalized_options,
+    ordered_levels,
+    session_line,
+    toggle_selected,
+)
 
 
 MODE_ORDER = ("mixed", "vocabulary", "mistake")
@@ -33,6 +40,10 @@ SCREEN_NAMES = frozenset(
     {
         "resume",
         "setup",
+        "level_filter",
+        "source_filter",
+        "history",
+        "history_detail",
         "shortage",
         "question",
         "feedback",
@@ -52,6 +63,12 @@ class QuizTuiService(Protocol):
     ) -> tuple[QuizSessionSummary, ...]: ...
 
     def continue_session(self, session_id: str): ...
+
+    def source_catalog(self): ...
+
+    def list_recent_sessions(
+        self, *, limit: int = 20
+    ) -> tuple[QuizSessionSummary, ...]: ...
 
     def decline_resume(self, session_id: str): ...
 
@@ -116,7 +133,16 @@ class QuizTuiState:
     requested_count: int = 10
     levels: tuple[str, ...] = ()
     sources: tuple[str, ...] = ()
+    available_levels: tuple[str, ...] = ()
+    available_sources: tuple[str, ...] = ()
     setup_focus: int = 0
+    level_cursor: int = 0
+    source_cursor: int = 0
+    history_sessions: tuple[QuizSessionSummary, ...] = ()
+    history_cursor: int = 0
+    history_result: QuizSessionResult | None = None
+    history_hide_abandoned: bool = True
+    history_problem_only: bool = False
     choice_cursor: int = 0
     armed_choice_id: str = ""
     reorder_choice_ids: list[str] = field(default_factory=list)
@@ -170,12 +196,27 @@ class QuizTuiController:
                 str(value).strip() for value in default_sources if str(value).strip()
             )
         )
+        available_levels: tuple[str, ...] = ordered_levels(levels)
+        available_sources: tuple[str, ...] = normalized_options(sources)
+        catalog_loader = getattr(service, "source_catalog", None)
+        if callable(catalog_loader):
+            try:
+                catalog = catalog_loader()
+                available_levels = ordered_levels((*catalog.levels, *levels))
+                available_sources = normalized_options((*catalog.sources, *sources))
+            except Exception:
+                # Filter discovery is optional UI metadata.  Existing CLI/config
+                # values remain usable even when catalog discovery is unavailable.
+                pass
+
         self.service = service
         self.state = QuizTuiState(
             mode=default_mode,
             requested_count=default_count,
-            levels=levels,
-            sources=sources,
+            levels=ordered_levels(levels),
+            sources=normalized_options(sources),
+            available_levels=available_levels,
+            available_sources=available_sources,
         )
         self._seed_factory = seed_factory or (lambda: secrets.token_hex(8))
         self.refresh_startup()
@@ -196,6 +237,10 @@ class QuizTuiController:
         handlers = {
             "resume": self._handle_resume,
             "setup": self._handle_setup,
+            "level_filter": self._handle_level_filter,
+            "source_filter": self._handle_source_filter,
+            "history": self._handle_history,
+            "history_detail": self._handle_history_detail,
             "shortage": self._handle_shortage,
             "question": self._handle_question,
             "feedback": self._handle_feedback,
@@ -216,10 +261,36 @@ class QuizTuiController:
                 self.state.mode = mode
                 self.state.setup_focus = 0
             return
+        if target == "open-level-filter":
+            self.state.level_cursor = 0
+            self.state.screen = "level_filter"
+            return
+        if target == "open-source-filter":
+            self.state.source_cursor = 0
+            self.state.screen = "source_filter"
+            return
+        if target == "open-history":
+            self._open_history()
+            return
         if target.startswith("choice:") and self.state.screen == "question":
             choice_id = target.split(":", 1)[1]
             self._direct_choice(choice_id)
             return
+        if target.startswith("level:") and self.state.screen == "level_filter":
+            value = target.split(":", 1)[1]
+            self.state.levels = ordered_levels(toggle_selected(self.state.levels, value))
+            return
+        if target.startswith("source:") and self.state.screen == "source_filter":
+            value = target.split(":", 1)[1]
+            self.state.sources = normalized_options(toggle_selected(self.state.sources, value))
+            return
+        if target.startswith("history:") and self.state.screen == "history":
+            session_id = target.split(":", 1)[1]
+            for index, summary in enumerate(self._history_view()):
+                if summary.session_id == session_id:
+                    self.state.history_cursor = index
+                    self._open_history_detail()
+                    return
         if target.startswith("resume:") and self.state.screen == "resume":
             session_id = target.split(":", 1)[1]
             for index, summary in enumerate(self.state.resumable_sessions):
@@ -245,6 +316,10 @@ class QuizTuiController:
         renderers = {
             "resume": self._render_resume,
             "setup": self._render_setup,
+            "level_filter": self._render_level_filter,
+            "source_filter": self._render_source_filter,
+            "history": self._render_history,
+            "history_detail": self._render_history_detail,
             "shortage": self._render_shortage,
             "question": self._render_question,
             "feedback": self._render_feedback,
@@ -294,6 +369,17 @@ class QuizTuiController:
             self.state.mode = MODE_ORDER[int(key) - 1]
             self.state.setup_focus = 0
             return
+        if key == "f":
+            self.state.level_cursor = 0
+            self.state.screen = "level_filter"
+            return
+        if key == "o":
+            self.state.source_cursor = 0
+            self.state.screen = "source_filter"
+            return
+        if key == "H":
+            self._open_history()
+            return
         if key in {"LEFT", "h"}:
             if self.state.setup_focus == 0:
                 self._cycle_mode(-1)
@@ -319,6 +405,77 @@ class QuizTuiController:
                 self._start_session(allow_shortage=False)
         elif key == "q":
             self.state.should_exit = True
+
+    def _handle_level_filter(self, key: str) -> None:
+        options = self.state.available_levels
+        if not options:
+            if key in {"ENTER", "SPACE", "q", "ESC"}:
+                self.state.screen = "setup"
+            return
+        if key in {"UP", "k"}:
+            self.state.level_cursor = (self.state.level_cursor - 1) % len(options)
+        elif key in {"DOWN", "j"}:
+            self.state.level_cursor = (self.state.level_cursor + 1) % len(options)
+        elif key == "SPACE":
+            value = options[self.state.level_cursor]
+            self.state.levels = ordered_levels(toggle_selected(self.state.levels, value))
+        elif key == "a":
+            self.state.levels = options
+        elif key in {"c", "x"}:
+            self.state.levels = ()
+        elif key in {"ENTER", "q", "ESC"}:
+            self.state.screen = "setup"
+
+    def _handle_source_filter(self, key: str) -> None:
+        options = self.state.available_sources
+        if not options:
+            if key in {"ENTER", "SPACE", "q", "ESC"}:
+                self.state.screen = "setup"
+            return
+        if key in {"UP", "k"}:
+            self.state.source_cursor = (self.state.source_cursor - 1) % len(options)
+        elif key in {"DOWN", "j"}:
+            self.state.source_cursor = (self.state.source_cursor + 1) % len(options)
+        elif key == "SPACE":
+            value = options[self.state.source_cursor]
+            self.state.sources = normalized_options(toggle_selected(self.state.sources, value))
+        elif key == "a":
+            self.state.sources = options
+        elif key in {"c", "x"}:
+            self.state.sources = ()
+        elif key in {"ENTER", "q", "ESC"}:
+            self.state.screen = "setup"
+
+    def _handle_history(self, key: str) -> None:
+        if key == "a":
+            self.state.history_hide_abandoned = not self.state.history_hide_abandoned
+            self.state.history_cursor = 0
+            return
+        if key == "w":
+            self.state.history_problem_only = not self.state.history_problem_only
+            self.state.history_cursor = 0
+            return
+        sessions = self._history_view()
+        if not sessions:
+            if key in {"ENTER", "SPACE", "q", "ESC"}:
+                self.state.screen = "setup"
+            return
+        if key in {"UP", "k"}:
+            self.state.history_cursor = (self.state.history_cursor - 1) % len(sessions)
+        elif key in {"DOWN", "j"}:
+            self.state.history_cursor = (self.state.history_cursor + 1) % len(sessions)
+        elif key in {"ENTER", "SPACE", "d"}:
+            self._open_history_detail()
+        elif key == "c":
+            self._continue_history_selected()
+        elif key in {"q", "ESC"}:
+            self.state.screen = "setup"
+
+    def _handle_history_detail(self, key: str) -> None:
+        if key == "c":
+            self._continue_history_selected()
+        elif key in {"ENTER", "SPACE", "q", "ESC", "b"}:
+            self.state.screen = "history"
 
     def _handle_shortage(self, key: str) -> None:
         if key in {"ENTER", "SPACE", "y"}:
@@ -423,6 +580,59 @@ class QuizTuiController:
             MAX_QUESTION_COUNT,
             max(MIN_QUESTION_COUNT, self.state.requested_count + delta),
         )
+
+    def _history_view(self) -> tuple[QuizSessionSummary, ...]:
+        sessions = self.state.history_sessions
+        if self.state.history_hide_abandoned:
+            sessions = tuple(item for item in sessions if item.state != "abandoned")
+        if self.state.history_problem_only:
+            sessions = tuple(
+                item for item in sessions if item.effective_incorrect_count > 0
+            )
+        return sessions
+
+    def _open_history(self) -> None:
+        loader = getattr(self.service, "list_recent_sessions", None)
+        if not callable(loader):
+            self.state.history_sessions = ()
+            self.state.message = "目前服務不支援 Quiz history 瀏覽。"
+            self.state.screen = "message"
+            return
+        try:
+            self.state.history_sessions = tuple(loader(limit=30))
+        except Exception as exc:
+            self.state.history_sessions = ()
+            self.state.message = f"無法讀取 Quiz history：{exc}"
+            self.state.screen = "message"
+            return
+        self.state.history_cursor = 0
+        self.state.history_result = None
+        self.state.screen = "history"
+
+    def _open_history_detail(self) -> None:
+        sessions = self._history_view()
+        if not sessions:
+            return
+        summary = sessions[self.state.history_cursor]
+        try:
+            self.state.history_result = self.service.session_result(summary.session_id)
+        except Exception as exc:
+            self.state.message = f"無法讀取 Quiz session：{exc}"
+            self.state.screen = "message"
+            return
+        self.state.screen = "history_detail"
+
+    def _continue_history_selected(self) -> None:
+        sessions = self._history_view()
+        if not sessions:
+            return
+        summary = sessions[self.state.history_cursor]
+        if not can_resume(summary):
+            self.state.message = "所選 session 已結束，無法繼續。"
+            self.state.screen = "message"
+            return
+        session = self.service.continue_session(summary.session_id)
+        self._load_session(session.summary.session_id)
 
     def _start_session(self, *, allow_shortage: bool) -> None:
         if not self.state.seed:
@@ -599,8 +809,15 @@ class QuizTuiController:
         targets.append((row, "setup-focus:1"))
         level_text = "、".join(self.state.levels) or "全部"
         source_text = "、".join(self.state.sources) or "全部"
-        lines.append(f"  JLPT：{level_text}")
-        lines.append(f"  來源：{source_text}")
+        row = len(lines)
+        lines.append(f"  JLPT：{level_text}（f 編輯）")
+        targets.append((row, "open-level-filter"))
+        row = len(lines)
+        lines.append(f"  來源：{source_text}（o 編輯）")
+        targets.append((row, "open-source-filter"))
+        row = len(lines)
+        lines.append("  歷史紀錄與未完成測驗（Shift+H）")
+        targets.append((row, "open-history"))
         row = len(lines)
         lines.append(("▶ " if focus == 2 else "  ") + "開始測驗")
         targets.append((row, "setup-focus:2"))
@@ -608,10 +825,124 @@ class QuizTuiController:
             [
                 "",
                 "↑/↓ 移動｜←/→ 調整｜1–3 選模式｜Enter 下一項/開始｜q 離開",
-                "JLPT／來源可由 jpnote config 或 jpnote quiz 參數設定。",
+                "f JLPT 篩選｜o 來源篩選｜Shift+H 歷史紀錄",
             ]
         )
         return self._screen(lines, width, targets)
+
+    def _render_level_filter(self, width: int) -> RenderedScreen:
+        options = self.state.available_levels
+        lines = ["JLPT 篩選", "", "未選擇任何等級代表全部。"]
+        targets: list[tuple[int, str]] = []
+        if not options:
+            lines.extend(["", "目前題庫沒有可列出的 JLPT 等級。"] )
+        else:
+            lines.append("")
+            for index, value in enumerate(options):
+                cursor = "▶" if index == self.state.level_cursor else " "
+                selected = "●" if value in self.state.levels else "○"
+                label = "未分類" if value == "unclassified" else value
+                row = len(lines)
+                lines.append(f"{cursor} {selected} {label}")
+                targets.append((row, f"level:{value}"))
+        lines.extend(["", "↑/↓ 移動｜Space 切換｜a 全選｜c 清除｜Enter/q 返回"] )
+        return self._screen(lines, width, targets)
+
+    def _render_source_filter(self, width: int) -> RenderedScreen:
+        options = self.state.available_sources
+        lines = ["來源篩選", "", "未選擇任何來源代表全部。"]
+        targets: list[tuple[int, str]] = []
+        if not options:
+            lines.extend(["", "目前題庫沒有可列出的來源。"] )
+        else:
+            window_size = 12
+            start = max(0, min(self.state.source_cursor - window_size // 2, len(options) - window_size))
+            end = min(len(options), start + window_size)
+            lines.append("")
+            if start > 0:
+                lines.append(f"…上方還有 {start} 個來源")
+            for index in range(start, end):
+                value = options[index]
+                cursor = "▶" if index == self.state.source_cursor else " "
+                selected = "●" if value in self.state.sources else "○"
+                row = len(lines)
+                lines.append(f"{cursor} {selected} {value}")
+                targets.append((row, f"source:{value}"))
+            if end < len(options):
+                lines.append(f"…下方還有 {len(options) - end} 個來源")
+        lines.extend(["", "↑/↓ 移動｜Space 切換｜a 全選｜c 清除｜Enter/q 返回"] )
+        return self._screen(lines, width, targets)
+
+    def _render_history(self, width: int) -> RenderedScreen:
+        sessions = self._history_view()
+        abandoned_label = "隱藏" if self.state.history_hide_abandoned else "顯示"
+        problem_label = "僅答錯/跳過" if self.state.history_problem_only else "全部結果"
+        lines = [
+            "Quiz 歷史紀錄",
+            f"篩選：{problem_label}｜abandoned：{abandoned_label}",
+            "",
+        ]
+        targets: list[tuple[int, str]] = []
+        if not sessions:
+            lines.extend(
+                [
+                    "目前篩選下沒有 Quiz 紀錄。",
+                    "",
+                    "w 切換答錯/跳過｜a 顯示/隱藏 abandoned｜Enter/q 返回",
+                ]
+            )
+            return self._screen(lines, width)
+        window_size = 12
+        start = max(0, min(self.state.history_cursor - window_size // 2, len(sessions) - window_size))
+        end = min(len(sessions), start + window_size)
+        if start > 0:
+            lines.append(f"…上方還有 {start} 筆")
+        for index in range(start, end):
+            summary = sessions[index]
+            cursor = "▶" if index == self.state.history_cursor else " "
+            row = len(lines)
+            lines.append(f"{cursor} {session_line(summary)}")
+            targets.append((row, f"history:{summary.session_id}"))
+        if end < len(sessions):
+            lines.append(f"…下方還有 {len(sessions) - end} 筆")
+        lines.extend(
+            [
+                "",
+                "↑/↓ 移動｜Enter 詳細｜c 繼續未完成測驗｜q 返回",
+                "w 切換答錯/跳過｜a 顯示/隱藏 abandoned",
+            ]
+        )
+        return self._screen(lines, width, targets)
+
+    def _render_history_detail(self, width: int) -> RenderedScreen:
+        result = self.state.history_result
+        assert result is not None
+        summary = result.summary
+        lines = [
+            "Quiz 紀錄詳細資訊",
+            "",
+            f"時間：{summary.started_at[:19].replace('T', ' ')}",
+            f"模式：{summary.mode}",
+            f"狀態：{summary.state}",
+            f"完成：{summary.answered_count}/{summary.question_count}",
+            f"答對：{summary.correct_count}",
+            f"答錯：{summary.incorrect_count}",
+            f"跳過：{summary.skipped_count}",
+            f"正確率：{summary.accuracy * 100:.1f}%",
+        ]
+        if summary.details_pruned:
+            lines.append("逐題詳細資料：已依 retention 規則清理")
+        if result.question_types:
+            lines.extend(["", "各題型表現"] )
+            for item in result.question_types:
+                lines.append(
+                    f"{item.question_type}：{item.correct_count}/{item.answered_count}"
+                    f"（{item.accuracy * 100:.0f}%）"
+                )
+        if can_resume(summary):
+            lines.extend(["", "c 繼續這場測驗"] )
+        lines.extend(["", "Enter/q 返回歷史紀錄"] )
+        return self._screen(lines, width)
 
     def _render_shortage(self, width: int) -> RenderedScreen:
         assert self.state.shortage_result is not None
