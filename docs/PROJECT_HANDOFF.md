@@ -1,205 +1,185 @@
 # jpnote 專案交接紀錄
 
 最後更新：2026-07-24（Asia/Taipei）
-目前程式基準：`jpnote v0.6.6.4`
+正式 release 基準：`jpnote v0.6.6.4`
+目前開發 checkpoint：Quiz Phase 5 TUI foundation＋usability／question-quality 修正完成
+
 用途：讓新的 ChatGPT 對話或新的開發工作階段，不依賴舊聊天內容也能直接接續工作。
 
 ---
 
-## 1. 目前唯一可信基準
+## 1. 目前可信基準
 
-### 程式碼
+### 正式 release
 
-- repository：本文件所在 Git repository
-- release branch：`main`
+- branch：`main`
 - release tag：`v0.6.6.4`
-- SQLite schema：`5`
-- public import JSON schema：本版未新增欄位
+- core SQLite schema：`5`
+- public import JSON schema：v0.6.6.4 相容，Quiz 開發未新增欄位
+- stability gate：通過
 
-### 使用者真實資料庫快照
+### Quiz 開發 checkpoint
 
-本輪另以使用者提供的 `jpnote.db` **隔離副本**驗證：
+目前 repository 已依序完成：
 
-- entries：240（grammar 93、vocabulary 147）
-- senses：314
-- attempts：27
-- resolved grammar relations：22
-- pending grammar relations：0
-- `PRAGMA quick_check`：`ok`
-- `PRAGMA foreign_key_check`：0 issues
-- 內建 audit：0 non-info issues
+1. Phase 1：optional Quiz package、stable read contracts、fault isolation。
+2. Phase 2：獨立 `quiz.db`、session/history、pause/resume/abandon、100 MiB detail retention、JSON export。
+3. Phase 3：安全 generators、distractor/fallback、question pool、mixed/vocabulary/mistake modes。
+4. Phase 4：headless service/debug adapter、lifecycle recovery、source detail feedback、Quiz schema v2。
+5. Phase 5：Python-native curses TUI foundation，以及第一輪 usability/question-quality 修正。
 
-任何健檢、migration、repair 或破壞性測試都必須先複製資料庫；不得直接修改使用者的真實 `~/.local/share/jpnote/jpnote.db`。
-
----
-
-## 2. v0.6.6.4 Stability gate 結論
-
-v0.6.6.3 廣域健檢找到的 Quiz 前 blocker 已集中修正，並完成 targeted regression、完整測試、coverage、安裝／升級 smoke 與真實 DB 副本驗證。
+目前已驗證：
 
 ```text
-pytest -q                             165 passed, 1 skipped, 12 subtests passed
-python -m compileall -q jpnote_app    PASS
-bash -n install.sh                    PASS
-app-only coverage                     72%
+python -m compileall -q jpnote_app tests    PASS
+pytest -q                                  346 passed, 12 subtests passed
+bash -n install.sh                          PASS
+git diff --check                           PASS
 ```
 
-唯一 skipped 項目是需要真實 `fzf` 的 integration test；不屬於本版修改範圍。
-
-**Stability gate：通過。**
-
-除非後續出現新的 blocking correctness／recovery regression，下一步不再做同規模廣域健檢，而是開始 Quiz 核心。
-
-完整報告：
+Quiz 使用獨立 SQLite：
 
 ```text
-docs/audits/v0.6.6.4-stability-gate.md
+core data:  ${JPNOTE_DATA_DIR:-~/.local/share/jpnote}/jpnote.db   schema v5
+quiz data:  ${JPNOTE_QUIZ_DB:-~/.local/share/jpnote/quiz.db}      schema v2
 ```
 
+Quiz history 不寫入既有教材 `attempts`。
+
 ---
 
-## 3. v0.6.6.4 已完成
+## 2. 已完成的 Quiz 行為
 
-### Relation edit 不再遺失資料
+### 資料與故障隔離
 
-- manual edit 改為 logical diff/upsert。
-- 不再用 `source_key OR target_key` 大範圍 delete/recreate。
-- 未顯示在 editor payload 的 pending relations 會原樣保留。
-- 未修改 relation 的 `source` 與 `created_at` 不會被洗掉。
-- 使用者明確刪除一組 relation 時，只刪除該 logical pair 與必要的 reciprocal／inverse。
+- core 啟動路徑不依賴 Quiz。
+- Quiz 只透過 stable public read service 取得 entry snapshot 與 replayable attempts。
+- 禁止依賴 core SQLite row ID、core repository internal 或 CLI private handler。
+- Quiz import/runtime/storage failure 不應阻止 core browse/import/audit/repair/export。
 
-### SQLite connection lifecycle
+### Session 與 history
 
-- raw `sqlite3.connect()` helper 全部顯式 close。
-- 關閉 GC 後重複 100 次 preflight，open file descriptors 不再線性成長。
-- 這項修正是長駐 Quiz TUI／Web service 的必要前置條件。
+- 狀態：`active`、`paused`、`interrupted`、`completed`、`abandoned`。
+- 每題逐筆持久化；resume 使用原本 immutable question snapshot。
+- skip 視為 incorrect，並保存事件。
+- session summary 與各題型摘要永久保留；details 受 100 MiB cap 管理。
+- 支援 history export、pruning 與安全刪除。
 
-### 共用 Safe Mutation Pipeline
+### 題目生成
 
-新增 `jpnote_app.mutations.execute_safe_mutation()`，統一：
+- vocabulary：日文↔中文四選一、意思是非、讀音是非。
+- mistake：multiple-choice replay、`reorder_4` replay、可安全還原時的 true/false replay。
+- MCQ distractor 不足時 fallback true/false，再不足就 skip。
+- 漢字詞的意思題在不造成同音歧義時優先以假名作 prompt，降低中文字形提示。
+- 錯誤讀音只使用長音、促音、撥音等細微陷阱；禁止拿無關詞彙讀音充當假答案。
 
-```text
-pre-mutation snapshot
-→ outer transaction
-→ operation
-→ commit
-→ committed-state export
-→ explicit close
-→ publish/prune undo backup
+### TUI
+
+- 設定畫面支援 mixed/vocabulary/mistake 與題數。
+- Enter/Space 依序移動「模式 → 題數 → 開始」，不再直接修改目前值。
+- 作答支援方向鍵、Space、Enter、數字鍵、skip、details、pause/quit。
+- `reorder_4` 顯示 Backspace 退回提示。
+- 答對、答錯、skip 都顯示實際正解；答對也能確認是否猜中。
+- 使用 terminal default background，保留 Kitty 等終端原有透明度；config 開關尚待正式接入。
+
+---
+
+## 3. 下一個正確工作項目
+
+### Phase 5 正式 CLI／config 整合
+
+下一個 checkpoint 應完成：
+
+1. `jpnote quiz` lazy loader；Quiz import 或 curses 啟動失敗時 core CLI 仍正常。
+2. JLPT level 與 source filter 設定畫面。
+3. config：預設模式、預設題數、透明背景開關、history detail cap／prune policy。
+4. TUI history/recent/resume 入口與 shortage confirmation。
+5. installer/package smoke，但暫不建立正式 `v0.7.0` tag。
+
+負分／猜題扣分屬後期 optional scoring backlog，不阻塞 v1。
+
+---
+
+## 4. 日常資料匯入與開發並行規則
+
+使用者會持續匯入日文文法與單字資料。預設情況下可以正常使用：
+
+```bash
+jpnote paste
+jpnote import FILE
+jpnote browse
 ```
 
-已接入：
+下列工作**不需要暫停匯入**：
 
-- CLI import／edit／delete
-- attempt edit／delete／options migration
-- repair／merge／romaji normalize
-- public `JpnoteCore` mutation methods
+- 純 repository 程式修改與 unit tests。
+- 使用 temporary `JPNOTE_DATA_DIR` 或 temporary `JPNOTE_QUIZ_DB` 的測試。
+- Quiz generator/TUI/debug 測試。
+- 文件更新。
 
-Public import 會在實際 transaction connection 上重建 plan 並執行完整 preflight；blocking conflict 不可略過，疑似重複需明確 `accept_warnings=True`。若 DB 已 commit、之後 Markdown export 失敗，pre-mutation undo snapshot 仍會發布。
+只有在回覆中明確標示「先暫停匯入」時才暫停，典型情況包括：
 
-### Crash／undo／backup recovery
+- 對正式 core DB 執行 migration、repair、restore 或 upgrade smoke。
+- 複製正式 DB 前需要固定一致快照。
+- 執行 `./install.sh` 並驗證正式安裝版本的短暫窗口。
+- 任何可能同時寫入正式 `jpnote.db` 的多程序測試。
 
-- `.pending-*` snapshot 名稱加入 owner PID。
-- 下次 writable connect 會安全辨識 dead-process orphan snapshot 並提升為 active undo backup。
-- 還活著的 process 所持有 snapshot 不會被誤收。
-- corrupt pending snapshot 保留供人工檢查，不自動覆蓋資料庫。
-- `jpnote undo --list` 可列出正常／損壞備份。
-- `jpnote undo --backup NUMBER_OR_FILENAME` 可指定較舊版本。
-- 預設 undo 會略過損壞的最新備份，選擇最新有效版本。
-- 先驗證 target backup，再建立 recovery snapshot。
-- active undo pool 與 recovery/restored auxiliary pool 各自受 50 MiB retention cap 管理。
-
-### 其他 correctness 修正
-
-- timestamp 改用 ISO-8601 microseconds，降低同秒新增／更新誤分類。
-- 明確指定不存在的 `--item-key`、負數或超出範圍的 `--attempt-index` 會直接報錯，不再靜默 no-selection。
+任何破壞性、migration、repair 或 fuzz 測試都必須使用隔離副本，不得直接修改正式 `~/.local/share/jpnote/jpnote.db`。
 
 ---
 
-## 4. 已知但不阻塞 Quiz core 的 backlog
+## 5. 已知 backlog
 
-### P2：多 writer concurrency
+### Quiz v1 尚待完成
 
-單人 CLI transaction correctness 正常，但多程序同時寫入仍可能得到 `database is locked`。在 Web、GUI、背景同步或多 writer 模式推出前，必須加入 busy timeout、retry 或 serialization policy。
+- 正式 `jpnote quiz` 指令與 lazy loading。
+- JLPT/source filters。
+- TUI history 瀏覽、wrong/skipped filter、abandoned hide filter。
+- config 整合與正式安裝／升級流程。
+- release 文件、coverage、fresh install/upgrade smoke、真實 DB 副本驗證。
 
-### P2：attempt identity matching 效能
+### 低優先
 
-大量既有 attempts 與大批 incoming attempts 的 identity comparison 仍可進一步索引化。使用者目前只有 27 筆 attempts，不阻塞 Quiz v1。
-
-### P3：產品與操作改善
-
-- relation／entry delete impact preview。
-- 更完整的 backup 管理介面。
-- Radar chart、response timing、熟悉度與間隔複習。
-
-以上不得在沒有 blocking regression 的情況下延後 Quiz 核心。
-
----
-
-## 5. 下一步：Quiz core
-
-依 `docs/QUIZ_V1_SPEC.md` 執行：
-
-1. 建立 optional、fault-isolated Quiz package/module。
-2. 定義 stable public read services 與 capability model；禁止直接讀 SQLite table、internal CLI 或 row ID。
-3. 建立獨立 Quiz session/history store，保存 immutable question snapshot。
-4. 實作 capability-based generators 與安全 distractor／fallback 規則。
-5. 建立 CLI/debug adapter。
-6. 核心與 history 通過 contract、fault-isolation、resume／abandon、retention／export tests 後，再做 Python-native TUI。
-
-第一版先完成題目生成與歷史紀錄；熟悉度／間隔複習低優先。
+- 可選負分／猜題扣分。
+- response timing、streak、熟悉度、spaced repetition。
+- radar chart／長期趨勢。
+- 多 writer busy timeout/retry/serialization。
 
 ---
 
-## 6. Quiz 硬性架構原則
+## 6. 每個 checkpoint 與 release 的紀錄規則
 
-- Quiz absent、disabled 或 broken 時，core jpnote 仍能 install、start、browse、import、audit、repair、export。
-- Quiz code、commands、models/migrations、history、generators、renderers 與 tests 盡量隔離。
-- Quiz 只能依賴 stable public/core service interfaces。
-- Quiz schema/data 必須 optional、additive；停用或移除 Quiz 不得破壞 grammar／vocabulary／attempts。
-- 使用 stable entry key、session ID、question-event ID，不使用 SQLite row ID。
-- 既有 `attempts` 是可重播題目來源；live Quiz response 另存於獨立 history。
-- 文法類學習練習不建立既有 jpnote `attempts`。
+每個會改變「目前完成範圍、下一步、schema、測試基線或重要規格」的開發 checkpoint，至少同步更新：
 
----
+1. 對應 `docs/audits/quiz-*-development.md`
+2. `docs/PROJECT_HANDOFF.md`
+3. `docs/ROADMAP.md`
+4. `docs/CHATGPT_CONTINUATION_PROMPT.md`
+5. 規格行為有變時更新 `docs/QUIZ_V1_SPEC.md`
 
-## 7. 每版強制交付與紀錄
+正式 release 另必須同步更新：
 
-每次 release 必須同步更新：
-
-1. `CHANGELOG.md`
-2. `README.md`
-3. `docs/USER_GUIDE.md`
-4. `docs/PROJECT_HANDOFF.md`
-5. `docs/ROADMAP.md`
-6. `docs/audits/vX.Y.Z-*.md`
-7. `docs/CHATGPT_CONTINUATION_PROMPT.md`
-8. `docs/RELEASE_CHECKLIST.md`
-9. 若 Quiz 行為有變，更新 `docs/QUIZ_V1_SPEC.md`
-10. Git commit、release tag、可套用更新檔與 SHA-256
-
-交付物固定分為：
-
-- **必須下載**：正常只提供一個可套用更新檔。
-- **僅供參考／備援**：audit、SHA、bundle、單獨文件。
-- **新聊天續接用**：最新版 continuation prompt。
-
-詳見 `docs/DELIVERY_GUIDE.md`。
+- `CHANGELOG.md`
+- `README.md`
+- `docs/USER_GUIDE.md`
+- `docs/RELEASE_CHECKLIST.md`
+- release audit、version、install script、release tag、patch 與 SHA-256
 
 ---
 
-## 8. 新對話接手時的最短流程
+## 7. 新對話接手流程
 
 ```bash
 git status
-git log --oneline --decorate -5
-git tag -n
-python -m compileall -q jpnote_app
+git log --oneline --decorate -10
+git tag --sort=-creatordate | head -n 15
+jpnote --version
+python -m compileall -q jpnote_app tests
 bash -n install.sh
 pytest -q
 ```
 
-接著依序閱讀：
+依序閱讀：
 
 ```text
 README.md
@@ -207,8 +187,8 @@ CHANGELOG.md
 docs/PROJECT_HANDOFF.md
 docs/ROADMAP.md
 docs/QUIZ_V1_SPEC.md
-docs/audits/v0.6.6.4-stability-gate.md
+docs/audits/quiz-development-handoff-2026-07-24.md
 docs/CHATGPT_CONTINUATION_PROMPT.md
 ```
 
-不要重新詢問已在 Quiz 規格中定稿的需求，也不要在沒有 blocking regression 時再用廣域健檢無限延後 Quiz。
+不要重新詢問已定稿需求；不要在沒有 blocking regression 時重啟同規模廣域健檢。

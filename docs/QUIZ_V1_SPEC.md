@@ -1,6 +1,6 @@
 # jpnote Quiz v1 功能規格
 
-狀態：第一版必要規格已確認  
+狀態：第一版必要規格已確認；實作已進入 Phase 5 TUI／CLI 整合
 最後更新：2026-07-24（Asia/Taipei）
 
 ---
@@ -48,7 +48,7 @@ Quiz v1 先完成：
   - `attempts`：教材錯題／可重播題目來源。
   - Quiz history：每次 live 作答的新獨立事件。
 - 同一道題重做兩次，也保存兩筆 Quiz events。
-- Quiz storage 必須 optional/additive；實際使用同 DB optional tables 或獨立 DB，實作前仍可選擇，但不得成為 core 啟動條件。
+- Quiz storage 必須 optional/additive；實作已選擇獨立 `quiz.db`（目前 schema v2），不得成為 core 啟動條件。
 
 ---
 
@@ -71,7 +71,9 @@ jpnote quiz
 ### 本場設定
 
 - 題數：預設 10 題，可在開始前調整。
-- config 可自訂預設題數。
+- config 可自訂預設模式與題數。
+- 設定畫面 Enter／Space 依序移動「模式 → 題數 → 開始」，左右鍵修改目前值。
+- config 可切換是否使用 terminal default background；預設保留終端原有透明背景。
 
 ### 選填篩選
 
@@ -92,7 +94,7 @@ jpnote quiz
 
 ### Vocabulary
 
-1. 日文 → 中文四選一
+1. 日文／讀音 → 中文四選一；漢字詞在同音不歧義時優先以假名作 prompt，避免中文字形直接提示。
 2. 中文 → 日文四選一
 3. 日文 ↔ 中文意思是非題
 4. 日文 ↔ reading 是非題
@@ -199,7 +201,7 @@ jpnote quiz
 
 ### 答對
 
-保持節奏簡潔；完整詳細內容不強制展開。
+保持節奏簡潔，但仍顯示實際正解（例如詞彙、讀音、意思或完整重組句），讓猜對者也能確認；完整詳細內容不強制展開。
 
 ---
 
@@ -431,9 +433,10 @@ Session summary 永久保留：
 
 ## 17. 尚未定案但不阻塞 v1 核心的事項
 
-- Quiz storage 最終採 core DB optional tables 或獨立 SQLite DB。
-- Python TUI framework 最終選擇。
+- Quiz storage 已定案為獨立 SQLite `quiz.db`。
+- Python-native TUI 已採 curses foundation；core 不依賴 TUI。
 - config key 命名與檔案格式細節。
 - 是否公開 response-time 支援（第一版不記錄）。
 - 熟悉度／間隔複習演算法。
+- optional negative scoring／guess penalty（低優先，不阻塞 v1）。
 - 雷達圖與其他統計美化。
