@@ -95,6 +95,7 @@ class QuizSessionResult:
     question_types: tuple[QuizQuestionTypeSummary, ...]
     incorrect_questions: tuple[QuestionEventSnapshot, ...]
     details_available: bool
+    questions: tuple[QuestionEventSnapshot, ...] = ()
 
     @property
     def completed_count(self) -> int:
@@ -427,6 +428,7 @@ class QuizService:
             question_types=snapshot.summary.question_type_summaries,
             incorrect_questions=incorrect_questions,
             details_available=not snapshot.summary.details_pruned,
+            questions=snapshot.questions,
         )
 
     def question_source_details(

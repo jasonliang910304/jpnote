@@ -44,6 +44,8 @@ SCREEN_NAMES = frozenset(
         "source_filter",
         "history",
         "history_detail",
+        "history_questions",
+        "history_question_detail",
         "shortage",
         "question",
         "feedback",
@@ -141,6 +143,9 @@ class QuizTuiState:
     history_sessions: tuple[QuizSessionSummary, ...] = ()
     history_cursor: int = 0
     history_result: QuizSessionResult | None = None
+    history_question_cursor: int = 0
+    history_question_event: QuestionEventSnapshot | None = None
+    history_question_source_details: QuizSourceDetails | None = None
     history_hide_abandoned: bool = True
     history_problem_only: bool = False
     choice_cursor: int = 0
@@ -241,6 +246,8 @@ class QuizTuiController:
             "source_filter": self._handle_source_filter,
             "history": self._handle_history,
             "history_detail": self._handle_history_detail,
+            "history_questions": self._handle_history_questions,
+            "history_question_detail": self._handle_history_question_detail,
             "shortage": self._handle_shortage,
             "question": self._handle_question,
             "feedback": self._handle_feedback,
@@ -291,6 +298,19 @@ class QuizTuiController:
                     self.state.history_cursor = index
                     self._open_history_detail()
                     return
+        if (
+            target.startswith("history-question:")
+            and self.state.screen == "history_questions"
+        ):
+            question_event_id = target.split(":", 1)[1]
+            result = self.state.history_result
+            if result is None:
+                return
+            for index, event in enumerate(result.questions):
+                if event.question_event_id == question_event_id:
+                    self.state.history_question_cursor = index
+                    self._open_history_question_detail()
+                    return
         if target.startswith("resume:") and self.state.screen == "resume":
             session_id = target.split(":", 1)[1]
             for index, summary in enumerate(self.state.resumable_sessions):
@@ -320,6 +340,8 @@ class QuizTuiController:
             "source_filter": self._render_source_filter,
             "history": self._render_history,
             "history_detail": self._render_history_detail,
+            "history_questions": self._render_history_questions,
+            "history_question_detail": self._render_history_question_detail,
             "shortage": self._render_shortage,
             "question": self._render_question,
             "feedback": self._render_feedback,
@@ -474,8 +496,48 @@ class QuizTuiController:
     def _handle_history_detail(self, key: str) -> None:
         if key == "c":
             self._continue_history_selected()
+        elif key == "p":
+            self._open_history_questions()
         elif key in {"ENTER", "SPACE", "q", "ESC", "b"}:
             self.state.screen = "history"
+
+    def _handle_history_questions(self, key: str) -> None:
+        result = self.state.history_result
+        questions = () if result is None else result.questions
+        if not questions:
+            if key in {"ENTER", "SPACE", "q", "ESC", "b"}:
+                self.state.screen = "history_detail"
+            return
+        if key in {"UP", "k"}:
+            self.state.history_question_cursor = (
+                self.state.history_question_cursor - 1
+            ) % len(questions)
+        elif key in {"DOWN", "j"}:
+            self.state.history_question_cursor = (
+                self.state.history_question_cursor + 1
+            ) % len(questions)
+        elif key in {"ENTER", "SPACE", "d"}:
+            self._open_history_question_detail()
+        elif key in {"q", "ESC", "b"}:
+            self.state.screen = "history_detail"
+
+    def _handle_history_question_detail(self, key: str) -> None:
+        if key in {"UP", "k", "LEFT"}:
+            result = self.state.history_result
+            if result is not None and result.questions:
+                self.state.history_question_cursor = (
+                    self.state.history_question_cursor - 1
+                ) % len(result.questions)
+                self._open_history_question_detail()
+        elif key in {"DOWN", "j", "RIGHT"}:
+            result = self.state.history_result
+            if result is not None and result.questions:
+                self.state.history_question_cursor = (
+                    self.state.history_question_cursor + 1
+                ) % len(result.questions)
+                self._open_history_question_detail()
+        elif key in {"ENTER", "SPACE", "q", "ESC", "b"}:
+            self.state.screen = "history_questions"
 
     def _handle_shortage(self, key: str) -> None:
         if key in {"ENTER", "SPACE", "y"}:
@@ -607,6 +669,9 @@ class QuizTuiController:
             return
         self.state.history_cursor = 0
         self.state.history_result = None
+        self.state.history_question_cursor = 0
+        self.state.history_question_event = None
+        self.state.history_question_source_details = None
         self.state.screen = "history"
 
     def _open_history_detail(self) -> None:
@@ -620,7 +685,48 @@ class QuizTuiController:
             self.state.message = f"無法讀取 Quiz session：{exc}"
             self.state.screen = "message"
             return
+        self.state.history_question_cursor = 0
+        self.state.history_question_event = None
+        self.state.history_question_source_details = None
         self.state.screen = "history_detail"
+
+    def _open_history_questions(self) -> None:
+        result = self.state.history_result
+        if result is None:
+            return
+        if not result.details_available or not result.questions:
+            self.state.message = (
+                "這場測驗的逐題詳細資料已清理，僅保留永久摘要。"
+            )
+            self.state.screen = "message"
+            return
+        self.state.history_question_cursor = min(
+            self.state.history_question_cursor, len(result.questions) - 1
+        )
+        self.state.history_question_event = None
+        self.state.history_question_source_details = None
+        self.state.screen = "history_questions"
+
+    def _open_history_question_detail(self) -> None:
+        result = self.state.history_result
+        if result is None or not result.questions:
+            return
+        event = result.questions[self.state.history_question_cursor]
+        self.state.history_question_event = event
+        try:
+            self.state.history_question_source_details = (
+                self.service.question_source_details(
+                    event.session_id, event.question_event_id
+                )
+            )
+        except Exception as exc:
+            self.state.history_question_source_details = QuizSourceDetails(
+                status="unavailable",
+                source_kind=event.question.source_kind,
+                source_key=event.question.source_key,
+                message=f"無法載入目前來源資料：{exc}",
+            )
+        self.state.screen = "history_question_detail"
 
     def _continue_history_selected(self) -> None:
         sessions = self._history_view()
@@ -939,9 +1045,122 @@ class QuizTuiController:
                     f"{item.question_type}：{item.correct_count}/{item.answered_count}"
                     f"（{item.accuracy * 100:.0f}%）"
                 )
+        if result.details_available and result.questions:
+            lines.extend(["", f"p 查看逐題紀錄（{len(result.questions)} 題）"] )
+        elif summary.details_pruned:
+            lines.extend(["", "逐題紀錄已清理，只保留本頁摘要"] )
         if can_resume(summary):
             lines.extend(["", "c 繼續這場測驗"] )
         lines.extend(["", "Enter/q 返回歷史紀錄"] )
+        return self._screen(lines, width)
+
+    def _render_history_questions(self, width: int) -> RenderedScreen:
+        result = self.state.history_result
+        assert result is not None
+        questions = result.questions
+        lines = [
+            "Quiz 逐題紀錄",
+            f"時間：{result.summary.started_at[:19].replace('T', ' ')}",
+            "",
+        ]
+        targets: list[tuple[int, str]] = []
+        window_size = 12
+        start = max(
+            0,
+            min(
+                self.state.history_question_cursor - window_size // 2,
+                len(questions) - window_size,
+            ),
+        )
+        end = min(len(questions), start + window_size)
+        if start > 0:
+            lines.append(f"…上方還有 {start} 題")
+        for index in range(start, end):
+            event = questions[index]
+            cursor = "▶" if index == self.state.history_question_cursor else " "
+            result_label = {
+                "correct": "✓",
+                "incorrect": "×",
+                "skipped": "↷",
+                None: "…",
+            }.get(event.result, "?")
+            prompt = _slice_cells(event.question.prompt.replace("\n", " "), 56)
+            if prompt != event.question.prompt.replace("\n", " "):
+                prompt += "…"
+            row = len(lines)
+            lines.append(
+                f"{cursor} {event.position}. {result_label} "
+                f"{event.question.question_type}｜{prompt}"
+            )
+            targets.append((row, f"history-question:{event.question_event_id}"))
+        if end < len(questions):
+            lines.append(f"…下方還有 {len(questions) - end} 題")
+        lines.extend(["", "↑/↓ 移動｜Enter 詳細｜q 返回摘要"])
+        return self._screen(lines, width, targets)
+
+    def _render_history_question_detail(self, width: int) -> RenderedScreen:
+        event = self.state.history_question_event
+        assert event is not None
+        question = event.question
+        result_label = {
+            "correct": "正確",
+            "incorrect": "錯誤",
+            "skipped": "跳過",
+            None: "未作答",
+        }.get(event.result, event.result or "未作答")
+        lines = [
+            f"Quiz 逐題紀錄｜第 {event.position} 題",
+            "",
+            f"結果：{result_label}",
+            f"題型：{question.question_type}",
+            f"題目：{question.prompt}",
+        ]
+        if question.choices:
+            lines.extend(["", "選項"] )
+            for choice in question.choices:
+                markers: list[str] = []
+                if choice.choice_id == question.correct_answer.answer_id:
+                    markers.append("正解")
+                if (
+                    event.user_answer is not None
+                    and choice.choice_id == event.user_answer.answer_id
+                ):
+                    markers.append("你的答案")
+                suffix = f"（{'、'.join(markers)}）" if markers else ""
+                lines.append(f"  {choice.text}{suffix}")
+        lines.extend(
+            [
+                "",
+                "你的答案："
+                + (event.user_answer.text if event.user_answer is not None else "未作答"),
+                f"正確答案：{question.correct_answer.text}",
+            ]
+        )
+        details = self.state.history_question_source_details
+        if details is not None:
+            lines.extend(["", "來源詳情"] )
+            if details.status != "available":
+                lines.append(details.message or details.status)
+            elif details.source_kind == "vocabulary":
+                title = details.title
+                if details.reading:
+                    title += f"（{details.reading}）"
+                if title:
+                    lines.append(title)
+                if details.level:
+                    lines.append(f"JLPT：{details.level}")
+                if details.meanings:
+                    lines.append("意思：" + "；".join(details.meanings))
+                if details.sources:
+                    lines.append("來源：" + "、".join(details.sources))
+            else:
+                if details.prompt:
+                    lines.append("原題：" + details.prompt)
+                if details.reason:
+                    lines.append("原因：" + details.reason)
+                if details.sources:
+                    lines.append("來源：" + "、".join(details.sources))
+        lines.extend(["", "↑/↓ 上一題/下一題｜Enter/q 返回逐題清單"] )
         return self._screen(lines, width)
 
     def _render_shortage(self, width: int) -> RenderedScreen:

@@ -18,8 +18,8 @@
 - core SQLite schema：v5
 - Quiz SQLite：獨立 `quiz.db`，schema v2
 - stability gate：通過
-- Quiz 開發已完成 Phase 1–4，以及 Phase 5 TUI、usability/question-quality、正式 CLI/config、互動式 filters/history navigation
-- 最新完整測試：`365 passed, 18 subtests passed`
+- Quiz 開發已完成 Phase 1–4，以及 Phase 5 TUI、usability/question-quality、正式 CLI/config、互動式 filters/history navigation、history 逐題檢視與隔離安裝 smoke
+- 最新完整測試：`376 passed, 18 subtests passed`
 
 啟動新工作階段先執行：
 
@@ -48,16 +48,18 @@ pytest -q
 - CLI 支援單次 `--mode`、`--count`、`--level`、`--source` 覆寫。
 - TUI 內支援 JLPT/source 多選、recent history/result details、未完成 session 繼續。
 - history 支援 wrong/skipped-only 與 abandoned show/hide filters。
+- history 可查看所有保存中的逐題題目、選項、使用者答案、正解、結果與來源詳情；details 已 pruning 時只顯示摘要。
+- 隔離安裝 smoke 已驗證 package 完整性、installed CLI/help/manual、reinstall backup 與 Quiz 缺失時的 core failure isolation。
 
 ## 下一個正確工作項目
 
-Phase 5 安裝整合與 release readiness：
+v0.7.0 release candidate 準備：
 
-1. source-tree `python -m jpnote_app quiz` smoke。
-2. 隔離安裝前綴的 installer/package smoke。
-3. installed `jpnote quiz` 與 core failure-isolation smoke。
-4. 決定 history per-question/export/delete 是否納入 v1。
-5. 同步 README、USER_GUIDE、CHANGELOG、release checklist 與 health-check；完成後再準備 v0.7.0 release。
+1. 將 history export/delete TUI 入口列為非阻塞後續；headless export/delete 維持可用。
+2. 更新 VERSION、README、USER_GUIDE、CHANGELOG、release checklist。
+3. 測量 app-only coverage 並新增 release health-check。
+4. 執行 fresh install、前一版 upgrade smoke 與正式 DB 副本驗證。
+5. 準備 release patch／SHA-256；完成 gate 前不要建立 `v0.7.0` tag。
 
 正式 install/upgrade smoke 前必須明確提醒使用者短暫停止日常資料匯入。
 

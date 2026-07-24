@@ -2,7 +2,7 @@
 
 最後更新：2026-07-24（Asia/Taipei）
 正式 release 基準：`jpnote v0.6.6.4`
-目前開發 checkpoint：Quiz Phase 5 互動式篩選／history navigation 完成
+目前開發 checkpoint：Quiz Phase 5 隔離安裝與 history 逐題檢視完成
 
 用途：讓新的 ChatGPT 對話或新的開發工作階段，不依賴舊聊天內容也能直接接續工作。
 
@@ -26,13 +26,13 @@
 2. Phase 2：獨立 `quiz.db`、session/history、pause/resume/abandon、100 MiB detail retention、JSON export。
 3. Phase 3：安全 generators、distractor/fallback、question pool、mixed/vocabulary/mistake modes。
 4. Phase 4：headless service/debug adapter、lifecycle recovery、source detail feedback、Quiz schema v2。
-5. Phase 5：Python-native curses TUI、usability/question-quality、正式 `jpnote quiz` CLI／config，以及互動式 JLPT/source filters 與 history navigation。
+5. Phase 5：Python-native curses TUI、usability/question-quality、正式 `jpnote quiz` CLI／config、互動式 JLPT/source filters、history navigation、逐題紀錄檢視與隔離安裝 smoke。
 
 目前已驗證：
 
 ```text
 python -m compileall -q jpnote_app tests    PASS
-pytest -q                                  365 passed, 18 subtests passed
+pytest -q                                  376 passed, 18 subtests passed
 bash -n install.sh                          PASS
 git diff --check                           PASS
 ```
@@ -87,20 +87,22 @@ Quiz history 不寫入既有教材 `attempts`。
 - TUI 內可用多選畫面調整 JLPT／來源條件；空選擇代表全部。
 - TUI history 可瀏覽 recent summaries、查看結果摘要、繼續未完成 session。
 - history 可切換僅顯示答錯／跳過紀錄，並顯示或隱藏 abandoned session。
+- history summary 可進入逐題清單，查看每題題目、選項、使用者答案、正解、結果與目前來源詳情；details 已 pruning 時明確只保留摘要。
+- 隔離安裝 smoke 已驗證完整 Quiz package、lazy loader、fresh init/stats、reinstall launcher backup、manual path 與 Quiz 缺失時的 core failure isolation。
 
 ---
 
 ## 3. 下一個正確工作項目
 
-### Phase 5 安裝整合與 release readiness
+### v0.7.0 release candidate 準備
 
 下一個 checkpoint 應完成：
 
-1. source-tree `python -m jpnote_app quiz` smoke。
-2. 使用隔離安裝前綴的 installer/package smoke。
-3. installed `jpnote quiz`、core command 與 Quiz failure-isolation smoke。
-4. TUI history per-question view、export/delete 入口是否納入 v1 的最後範圍確認。
-5. 同步 README、USER_GUIDE、CHANGELOG、release checklist 與 health-check；暫不建立正式 `v0.7.0` tag。
+1. 將 TUI history export/delete 入口明確延後，不阻塞 v1；headless storage/API 能力維持可用。
+2. 更新 VERSION、README、USER_GUIDE、CHANGELOG、release checklist 與 release health-check。
+3. 測量 app-only coverage，執行 fresh install 與前一版 upgrade smoke。
+4. 使用正式 DB **副本**執行 quick_check、foreign_key_check、audit、stats 與 read-only Quiz planning。
+5. 準備 release patch／SHA-256；完成 gate 前不建立正式 `v0.7.0` tag。
 
 進行正式安裝／升級 smoke 前，必須先明確提醒使用者短暫停止日常資料匯入。負分／猜題扣分仍屬後期 optional scoring backlog，不阻塞 v1。
 
@@ -138,9 +140,9 @@ jpnote browse
 
 ### Quiz v1 尚待完成
 
-- TUI history per-question view，以及 export/delete 是否納入首版的最後決策。
-- 正式安裝／升級流程與 package smoke。
-- release 文件、coverage、fresh install/upgrade smoke、真實 DB 副本驗證。
+- TUI history export/delete 入口（headless export/delete 已完成；延後不阻塞 v1）。
+- 正式安裝／升級 smoke 與 release candidate 文件。
+- coverage、health-check、真實 DB 副本驗證。
 
 ### 低優先
 

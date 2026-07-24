@@ -2,14 +2,14 @@
 
 最後更新：2026-07-24（Asia/Taipei）
 正式 release 基準：v0.6.6.4
-目前開發位置：Quiz Phase 5 互動式篩選／history navigation 完成；下一步為安裝整合與 release readiness
+目前開發位置：Quiz Phase 5 history 逐題檢視與隔離安裝 smoke 完成；下一步為 v0.7.0 release candidate 準備
 
 ## 已通過的前置 gate
 
 - v0.6.6.4 stability gate：通過。
 - core schema 維持 v5。
 - Quiz 採獨立 `quiz.db`，目前 schema v2。
-- 最新完整 regression：`365 passed, 18 subtests passed`。
+- 最新完整 regression：`376 passed, 18 subtests passed`。
 
 ## Phase 1：Quiz 契約與隔離骨架 — 完成
 
@@ -72,20 +72,25 @@
 - 題庫不足確認畫面維持既有安全縮減流程。
 - setup Enter 流程仍為「模式 → 題數 → 開始」，filters/history 使用明確快捷鍵與滑鼠目標。
 
-### 下一個 checkpoint：安裝整合與 release readiness
+### history 逐題檢視／隔離安裝 — 完成
 
-1. source-tree command smoke。
-2. 隔離安裝前綴的 installer/package smoke。
-3. installed `jpnote quiz` 與 core failure-isolation smoke。
-4. 使用者文件、release checklist、coverage/health-check 同步。
-5. 確認 history per-question/export/delete 的 v1 最終範圍。
+- history summary 可進入逐題清單。
+- 每題顯示題目、選項、作答、正解、結果與來源詳情。
+- retention 已清除 details 時明確只顯示永久摘要。
+- 隔離 installer/package smoke 已驗證 fresh install、reinstall、manual、lazy loader 與 Quiz 缺失時的 core failure isolation。
 
-### Phase 5 後續
+### 下一個 checkpoint：v0.7.0 release candidate 準備
 
-- TUI history per-question view。
+1. VERSION、README、USER_GUIDE、CHANGELOG 與 release checklist。
+2. app-only coverage 與 release health-check。
+3. fresh install／前一版 upgrade smoke。
+4. 正式 DB 副本 quick_check、foreign_key_check、audit、stats 與 read-only Quiz planning。
+5. release patch、SHA-256 與 continuation prompt；gate 完成前不建立 release tag。
+
+### Phase 5 後續（不阻塞 v1）
+
 - history export/delete TUI 入口。
-- fresh install/upgrade smoke。
-- v0.7.0 release audit、coverage、docs 與 artifacts。
+- optional negative scoring／guess penalty。
 
 ## 不阻塞 v1 的 backlog
 
