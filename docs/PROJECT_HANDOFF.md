@@ -48,11 +48,13 @@ pytest -q                             150 passed, 1 skipped, 12 subtests passed
 
 目前沒有已知、已重現的 SQLite corruption。
 
-尚未完成：針對 v0.6.6.3 的完整 wide/bruteforce audit。現有完整廣域報告是 v0.6.6.1，已保存於：
+v0.6.6.3 的完整 wide/bruteforce audit 已完成，報告位於：
 
 ```text
-docs/audits/v0.6.6.1-wide-bruteforce-audit.md
+docs/audits/v0.6.6.3-wide-bruteforce-audit.md
 ```
+
+目前 stability gate **尚未通過**。主要 blocker：relation edit 會刪除 pending relations、raw SQLite helper connection leak，以及 public mutation API 未收斂到共用安全 pipeline。
 
 ---
 
@@ -90,51 +92,40 @@ docs/audits/v0.6.6.1-wide-bruteforce-audit.md
 
 ---
 
-## 4. 尚待確認或修正的安全 backlog
+## 4. v0.6.6.3 健檢後的安全 backlog
 
-以下來自 v0.6.6.1 廣域報告，CHANGELOG 未顯示已處理。必須先在 v0.6.6.3 重新重現，不能直接假設仍存在，也不能直接刪除 backlog。
+完整重現方式與測試數據見 `docs/audits/v0.6.6.3-wide-bruteforce-audit.md`。
 
-### P1：Review／Quiz 開始前優先確認
+### Quiz 前必修
 
-1. **Relation edit provenance**
-   - 修改一條 relation note 時，可能 delete/recreate 同 entry 的其他 relation。
-   - 可能洗掉未修改 relation 的 `source` 與 `created_at`。
-   - 目標：改為 logical relation diff/upsert，只改真的有變化者。
+1. **Relation edit pending-data loss**
+   - 修改 resolved relation 時，該 entry 的 pending relations 會被整批刪除。
+   - 同時會洗掉未修改 relation 的 provenance。
+   - 必須改為 logical diff/upsert。
 
-2. **Timestamp precision / recent 分類**
-   - 秒級 timestamp 可能讓同秒 create→update 仍有 `created_at == updated_at`。
-   - `recent` 可能把實際更新誤判成 added。
-   - 需評估 microseconds 或明確事件語意。
+2. **Raw SQLite connection leak**
+   - 多個 helper 使用 transaction context manager，但沒有顯式 close。
+   - 長駐 TUI 會線性累積 file descriptors。
 
-3. **SIGKILL orphan `.pending-*` backups**
-   - `kill -9` 可能留下 hidden pending snapshot。
-   - 目前可能不列入 backup list 與 50 MiB cap。
-   - 需設計保守的 orphan cleanup policy。
+3. **Public mutation pipeline**
+   - `JpnoteCore` 多個寫入方法繞過 CLI 的完整 preflight、backup、conflict gate 與 export。
+   - TUI／Web／plugin 寫入前必須收斂到共用 Safe Mutation Service。
 
-4. **Undo 選擇與損壞 fallback**
-   - 最新 backup 損壞時，需能列出／選擇較舊有效 backup。
-   - 候選介面：`jpnote undo --list`、`jpnote undo --backup NAME`。
-   - 應先驗證目標，再建立 recovery snapshot。
+4. **SIGKILL orphan pending backup recovery**
+   - commit 後、backup publish 前被 kill 時，唯一 undo snapshot 可能只剩 hidden `.pending-*`。
+   - 需要啟動時 recovery/promotion policy。
 
-5. **Explicit selector typo diagnostics**
-   - `--item-key` 不存在或 `--attempt-index` 越界，不應靜默變成 no-selection。
-   - 明確 selector 沒命中時應回報 error。
+### 建議 maintenance patch 同版處理
 
-### P2：可以與 Quiz 初期並行評估
+5. timestamp precision／recent 分類。
+6. undo list、指定 backup、corrupt newest fallback。
+7. recovery/restored backup retention cap。
+8. explicit selector typo diagnostics。
 
-6. **Attempt identity matching 效能**
-   - 舊 benchmark：5000 existing × 100 classifications 約 7.69 秒。
-   - 大量歷史後需避免每筆 incoming attempt 線性重掃。
+### 可延後
 
-### P3：GUI／Web／background writer 前必須完成
-
-7. **Concurrent writer policy**
-   - 舊測試 20 processes：18 success、2 `database is locked`；無 corruption。
-   - 未來多介面前需 busy timeout、有限 retry、writer serialization/process lock。
-
-以上問題若 v0.6.6.3 無法重現，需在新 audit report 中記錄測試方法與結果，再標記 closed。
-
----
+9. concurrent writer serialization：Web／GUI／background writer 前。
+10. attempt identity matching optimization：資料量成長後。
 
 ## 5. Stability gate
 
@@ -159,28 +150,13 @@ docs/audits/v0.6.6.1-wide-bruteforce-audit.md
 
 ## 6. 下一步執行順序
 
-1. **完成本地 Git 與交接文件**（本次工作）。
-2. **對 v0.6.6.3 做最後一次 wide/bruteforce audit**：
-   - baseline tests／coverage
-   - migration matrix
-   - import/preflight/apply/repair/export cross-path
-   - malformed payload fuzz
-   - relation/merge/pending randomized invariants
-   - attempt identity fuzz
-   - backup/undo/no-op/cap/corrupt backup
-   - SIGTERM/SIGKILL
-   - concurrent writer
-   - large-data performance
-   - CLI JSON/ANSI/control/path safety
-3. **對真實 `jpnote.db` 副本做唯讀健檢**：
-   - quick_check／foreign_key_check
-   - audit
-   - relation invariants
-   - aliases/senses/sources
-   - attempts/event identity/structured fields
-4. 若發現 blocking correctness/recovery 問題，做集中 maintenance patch，跑 targeted regression。
-5. 通過 stability gate 後，開始 Quiz 核心與 TUI。
-6. 熟悉度／間隔複習排程最後再討論與加入。
+1. v0.6.6.3 wide/bruteforce audit 與真實 DB 唯讀健檢：**已完成**。
+2. 做集中 maintenance patch：relation edit、SQLite connection lifecycle、safe mutation API、pending backup recovery。
+3. 視修改風險同版處理 timestamp、undo fallback、backup retention、selector diagnostics。
+4. 跑 targeted regression、完整 pytest、migration/install smoke、真實 DB 副本再驗證。
+5. 通過 stability gate 後，開始 Quiz core 與獨立 history store。
+6. 再建立 Python-native TUI。
+7. 熟悉度／間隔複習排程最後再討論與加入。
 
 ---
 
