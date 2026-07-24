@@ -52,3 +52,6 @@ local-data/
 *~
 *.swp
 *.swo
+
+# Local-only emergency handoff reference
+/LOCAL_JPNOTE_HANDOFF_GUIDE.md

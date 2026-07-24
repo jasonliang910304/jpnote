@@ -114,6 +114,8 @@ class QuizTuiState:
     screen: str = "setup"
     mode: str = "mixed"
     requested_count: int = 10
+    levels: tuple[str, ...] = ()
+    sources: tuple[str, ...] = ()
     setup_focus: int = 0
     choice_cursor: int = 0
     armed_choice_id: str = ""
@@ -144,17 +146,37 @@ class QuizTuiController:
         self,
         service: QuizTuiService,
         *,
+        default_mode: str = "mixed",
         default_count: int = 10,
+        default_levels: Sequence[str] = (),
+        default_sources: Sequence[str] = (),
         seed_factory: Callable[[], str] | None = None,
     ) -> None:
+        if default_mode not in MODE_ORDER:
+            raise ValueError(f"不支援的 default_mode：{default_mode}")
         if not isinstance(default_count, int) or isinstance(default_count, bool):
             raise TypeError("default_count 必須是整數")
         if not MIN_QUESTION_COUNT <= default_count <= MAX_QUESTION_COUNT:
             raise ValueError(
                 f"default_count 必須介於 {MIN_QUESTION_COUNT} 到 {MAX_QUESTION_COUNT}"
             )
+        levels = tuple(
+            dict.fromkeys(
+                str(value).strip() for value in default_levels if str(value).strip()
+            )
+        )
+        sources = tuple(
+            dict.fromkeys(
+                str(value).strip() for value in default_sources if str(value).strip()
+            )
+        )
         self.service = service
-        self.state = QuizTuiState(requested_count=default_count)
+        self.state = QuizTuiState(
+            mode=default_mode,
+            requested_count=default_count,
+            levels=levels,
+            sources=sources,
+        )
         self._seed_factory = seed_factory or (lambda: secrets.token_hex(8))
         self.refresh_startup()
 
@@ -408,6 +430,8 @@ class QuizTuiController:
         result = self.service.start_session(
             mode=self.state.mode,
             requested_count=self.state.requested_count,
+            levels=self.state.levels or None,
+            sources=self.state.sources or None,
             seed=self.state.seed,
             allow_shortage=allow_shortage,
         )
@@ -573,6 +597,10 @@ class QuizTuiController:
         row = len(lines)
         lines.append(("▶ " if focus == 1 else "  ") + f"題數：{self.state.requested_count}")
         targets.append((row, "setup-focus:1"))
+        level_text = "、".join(self.state.levels) or "全部"
+        source_text = "、".join(self.state.sources) or "全部"
+        lines.append(f"  JLPT：{level_text}")
+        lines.append(f"  來源：{source_text}")
         row = len(lines)
         lines.append(("▶ " if focus == 2 else "  ") + "開始測驗")
         targets.append((row, "setup-focus:2"))
@@ -580,7 +608,7 @@ class QuizTuiController:
             [
                 "",
                 "↑/↓ 移動｜←/→ 調整｜1–3 選模式｜Enter 下一項/開始｜q 離開",
-                "JLPT／來源篩選會在下一個 TUI checkpoint 接入。",
+                "JLPT／來源可由 jpnote config 或 jpnote quiz 參數設定。",
             ]
         )
         return self._screen(lines, width, targets)

@@ -2,14 +2,14 @@
 
 最後更新：2026-07-24（Asia/Taipei）
 正式 release 基準：v0.6.6.4
-目前開發位置：Quiz Phase 5 TUI usability 完成；下一步為正式 CLI／config 整合
+目前開發位置：Quiz Phase 5 正式 CLI／config foundation 完成；下一步為互動式篩選／history 與安裝整合
 
 ## 已通過的前置 gate
 
 - v0.6.6.4 stability gate：通過。
 - core schema 維持 v5。
 - Quiz 採獨立 `quiz.db`，目前 schema v2。
-- 最新完整 regression：`346 passed, 12 subtests passed`。
+- 最新完整 regression：`355 passed, 18 subtests passed`。
 
 ## Phase 1：Quiz 契約與隔離骨架 — 完成
 
@@ -56,14 +56,20 @@
 - 答對也顯示實際答案。
 - terminal default background／透明度相容。
 
-### 下一個 checkpoint：正式 CLI／config 整合
+### 正式 CLI／config foundation — 完成
 
-1. `jpnote quiz` lazy loader 與 core failure isolation。
-2. JLPT/source filters。
-3. config keys：default mode/count、transparent background、history cap/prune policy。
-4. TUI recent/history/resume 入口。
-5. shortage confirmation 畫面。
-6. installer/package smoke。
+- `jpnote quiz` lazy loader 與 core failure isolation。
+- config keys：default mode/count、levels/sources、transparent background、history cap/prune policy。
+- CLI single-session overrides：mode/count/level/source。
+- TUI 顯示已套用 filters，並依 config 執行 session 後 pruning。
+
+### 下一個 checkpoint：互動式篩選／history 與安裝整合
+
+1. TUI 內 JLPT/source 多選畫面。
+2. TUI recent/history/resume 入口。
+3. wrong/skipped filter 與 abandoned label/hide filter。
+4. shortage confirmation 正式互動畫面。
+5. source-tree／installed-command／installer package smoke。
 
 ### Phase 5 後續
 

@@ -33,3 +33,24 @@ def load_quiz_runtime(source_reader: Any = None) -> OptionalFeatureLoad:
             error=f"Quiz 無法啟用：{exc}",
         )
     return OptionalFeatureLoad(name="quiz", available=True, value=runtime)
+
+
+def load_quiz_tui() -> OptionalFeatureLoad:
+    """Load the user-facing Quiz runner only when ``jpnote quiz`` is invoked."""
+
+    try:
+        tui_module = import_module("jpnote_app.quiz.tui")
+        runner = tui_module.run
+    except Exception as exc:
+        return OptionalFeatureLoad(
+            name="quiz-tui",
+            available=False,
+            error=f"Quiz TUI 無法啟用：{exc}",
+        )
+    if not callable(runner):
+        return OptionalFeatureLoad(
+            name="quiz-tui",
+            available=False,
+            error="Quiz TUI 無法啟用：run 入口不可呼叫",
+        )
+    return OptionalFeatureLoad(name="quiz-tui", available=True, value=runner)

@@ -22,10 +22,12 @@ from .browsing import DEFAULT_TYPES, TYPE_LABELS, browse_json, browse_records
 from .audit import apply_safe_repairs, run_audit
 from .config import BACKUP_MAX_BYTES, VERSION, backup_dir, db_path, export_dir
 from .preferences import (
+    DEFAULT_CONFIG,
     browse_default_filters,
     config_path as preferences_path,
     ensure_preferences,
     load_preferences,
+    quiz_defaults,
     validate_preferences,
     write_preferences,
 )
@@ -480,6 +482,20 @@ def command_config_show(args: argparse.Namespace) -> int:
         print(f"預設等級：{'、'.join(browse['levels']) or '全部'}")
         results = browse["results"]
         print(f"預設錯題結果：{'、'.join(results) or '全部'}")
+        quiz = config["quiz"]
+        print("Quiz 預設模式：" + quiz["mode"])
+        print(f"Quiz 預設題數：{quiz['count']}")
+        print(f"Quiz 預設等級：{'、'.join(quiz['levels']) or '全部'}")
+        print(f"Quiz 預設來源：{'、'.join(quiz['sources']) or '全部'}")
+        print(
+            "Quiz 透明背景："
+            + ("開啟" if quiz["transparent_background"] else "關閉")
+        )
+        print(f"Quiz 詳細歷史上限：{quiz['history_detail_cap_mib']} MiB")
+        print(
+            "Quiz 結束後自動清理："
+            + ("開啟" if quiz["prune_after_session"] else "關閉")
+        )
     return 0
 
 
@@ -489,13 +505,7 @@ def command_config_path(_: argparse.Namespace) -> int:
 
 
 def command_config_reset(_: argparse.Namespace) -> int:
-    path = write_preferences({
-        "browse": {
-            "types": list(DEFAULT_TYPES),
-            "levels": [],
-            "results": [],
-        }
-    })
+    path = write_preferences(DEFAULT_CONFIG)
     print(f"已恢復預設設定：{path}")
     return 0
 
@@ -519,6 +529,46 @@ def command_config_edit(_: argparse.Namespace) -> int:
         return 0
     finally:
         temp.unlink(missing_ok=True)
+
+
+def command_quiz(args: argparse.Namespace) -> int:
+    """Launch the optional Quiz TUI without importing Quiz during core startup."""
+
+    settings = quiz_defaults()
+    if args.mode is not None:
+        settings["mode"] = args.mode
+    if args.count is not None:
+        if not 1 <= args.count <= 100:
+            raise ValueError("--count 必須介於 1 到 100")
+        settings["count"] = args.count
+    if args.levels:
+        settings["levels"] = list(dict.fromkeys(args.levels))
+    if args.sources:
+        settings["sources"] = list(dict.fromkeys(args.sources))
+    if args.transparent_background is not None:
+        settings["transparent_background"] = args.transparent_background
+
+    # Deliberately lazy: build_parser(), --help and every core command remain
+    # usable even if the optional Quiz package or curses adapter is broken.
+    from .optional_features import load_quiz_tui
+
+    feature = load_quiz_tui()
+    if not feature.available:
+        print(f"錯誤：{feature.error}", file=sys.stderr)
+        return 2
+    return int(
+        feature.value(
+            default_mode=settings["mode"],
+            default_count=settings["count"],
+            default_levels=settings["levels"],
+            default_sources=settings["sources"],
+            transparent_background=settings["transparent_background"],
+            history_detail_cap_bytes=(
+                settings["history_detail_cap_mib"] * 1024 * 1024
+            ),
+            prune_after_session=settings["prune_after_session"],
+        )
+    )
 
 
 def command_import(args: argparse.Namespace) -> int:
@@ -1393,6 +1443,45 @@ def build_parser() -> argparse.ArgumentParser:
 
     cp = config_sub.add_parser("reset", help="恢復 jpnote 預設設定")
     cp.set_defaults(func=command_config_reset)
+
+    p = sub.add_parser("quiz", help="啟動可選的 Python-native Quiz TUI")
+    p.add_argument(
+        "--mode",
+        choices=("mixed", "vocabulary", "mistake"),
+        help="覆蓋本次測驗模式，不修改設定檔",
+    )
+    p.add_argument(
+        "--count",
+        type=int,
+        help="覆蓋本次題數（1–100），不修改設定檔",
+    )
+    p.add_argument(
+        "--level",
+        action="append",
+        dest="levels",
+        choices=("N5", "N4", "N3", "N2", "N1", "unclassified"),
+        help="限制 JLPT 等級，可重複",
+    )
+    p.add_argument(
+        "--source",
+        action="append",
+        dest="sources",
+        help="限制完全相同的來源字串，可重複",
+    )
+    background = p.add_mutually_exclusive_group()
+    background.add_argument(
+        "--transparent-background",
+        dest="transparent_background",
+        action="store_true",
+        help="本次使用終端預設背景",
+    )
+    background.add_argument(
+        "--opaque-background",
+        dest="transparent_background",
+        action="store_false",
+        help="本次停用透明背景支援",
+    )
+    p.set_defaults(transparent_background=None, func=command_quiz)
 
     p = sub.add_parser("import", help="從 JSON 檔案匯入")
     p.add_argument("file")

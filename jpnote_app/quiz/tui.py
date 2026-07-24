@@ -11,6 +11,7 @@ import curses
 import locale
 import sys
 from collections.abc import Sequence
+from typing import Any
 
 from jpnote_app.study_sources import StudySourceService
 
@@ -133,19 +134,58 @@ def _run_curses(
     return 0
 
 
+def _prune_history_if_configured(
+    service: Any,
+    *,
+    enabled: bool,
+    cap_bytes: int,
+) -> None:
+    if not enabled:
+        return
+    store = getattr(service, "session_store", None)
+    prune = getattr(store, "prune_details", None)
+    if not callable(prune):
+        return
+    try:
+        prune(cap_bytes=cap_bytes)
+    except Exception:
+        # Retention is best-effort at the UI boundary. A pruning failure must
+        # never turn a completed or paused Quiz into a core CLI failure.
+        pass
+
+
 def run(
     *,
     service: QuizService | None = None,
+    default_mode: str = "mixed",
     default_count: int = 10,
+    default_levels: Sequence[str] = (),
+    default_sources: Sequence[str] = (),
     transparent_background: bool = True,
+    history_detail_cap_bytes: int = 100 * 1024 * 1024,
+    prune_after_session: bool = True,
 ) -> int:
     locale.setlocale(locale.LC_ALL, "")
-    controller = QuizTuiController(service or _service(), default_count=default_count)
-    return curses.wrapper(
-        _run_curses,
-        controller,
-        transparent_background,
+    quiz_service = service or _service()
+    controller = QuizTuiController(
+        quiz_service,
+        default_mode=default_mode,
+        default_count=default_count,
+        default_levels=default_levels,
+        default_sources=default_sources,
     )
+    try:
+        return curses.wrapper(
+            _run_curses,
+            controller,
+            transparent_background,
+        )
+    finally:
+        _prune_history_if_configured(
+            quiz_service,
+            enabled=prune_after_session,
+            cap_bytes=history_detail_cap_bytes,
+        )
 
 
 def main(argv: Sequence[str] | None = None) -> int:

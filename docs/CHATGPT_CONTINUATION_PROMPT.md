@@ -18,8 +18,8 @@
 - core SQLite schema：v5
 - Quiz SQLite：獨立 `quiz.db`，schema v2
 - stability gate：通過
-- Quiz 開發已完成 Phase 1–4，以及 Phase 5 TUI foundation＋第一輪 usability/question-quality 修正
-- 最新完整測試：`346 passed, 12 subtests passed`
+- Quiz 開發已完成 Phase 1–4，以及 Phase 5 TUI、usability/question-quality 與正式 CLI/config foundation
+- 最新完整測試：`355 passed, 18 subtests passed`
 
 啟動新工作階段先執行：
 
@@ -43,16 +43,19 @@ pytest -q
 - 設定 Enter 流程、reorder Backspace 提示、正確答案回饋、terminal default background。
 - 漢字意思題在安全時優先以假名作 prompt。
 - 讀音 false trap 只使用長音／促音／撥音等細微變化，不使用無關詞讀音。
+- 正式 `jpnote quiz` lazy loader；Quiz failure 不阻止其他 core CLI。
+- config 支援 mode/count/levels/sources、transparent background、history cap 與 prune policy。
+- CLI 支援單次 `--mode`、`--count`、`--level`、`--source` 覆寫。
 
 ## 下一個正確工作項目
 
-Phase 5 正式 CLI／config 整合：
+Phase 5 互動式篩選／history 與安裝整合：
 
-1. `jpnote quiz` lazy loader，Quiz broken 時 core CLI 仍正常。
-2. JLPT/source filters。
-3. config default mode/count、transparent background、history cap/prune policy。
-4. TUI history/recent/resume 與 shortage confirmation。
-5. installer/package smoke；完成後再準備 v0.7.0 release。
+1. TUI 內 JLPT/source 多選畫面。
+2. TUI history/recent/resume、wrong/skipped 與 abandoned filters。
+3. shortage confirmation 正式互動畫面。
+4. source-tree／installed-command／installer package smoke。
+5. 同步 release docs 與 readiness；完成後再準備 v0.7.0 release。
 
 負分／猜題扣分是低優先 optional scoring backlog，不阻塞當前工作。
 

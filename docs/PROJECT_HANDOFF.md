@@ -2,7 +2,7 @@
 
 最後更新：2026-07-24（Asia/Taipei）
 正式 release 基準：`jpnote v0.6.6.4`
-目前開發 checkpoint：Quiz Phase 5 TUI foundation＋usability／question-quality 修正完成
+目前開發 checkpoint：Quiz Phase 5 正式 CLI／config foundation 完成
 
 用途：讓新的 ChatGPT 對話或新的開發工作階段，不依賴舊聊天內容也能直接接續工作。
 
@@ -26,13 +26,13 @@
 2. Phase 2：獨立 `quiz.db`、session/history、pause/resume/abandon、100 MiB detail retention、JSON export。
 3. Phase 3：安全 generators、distractor/fallback、question pool、mixed/vocabulary/mistake modes。
 4. Phase 4：headless service/debug adapter、lifecycle recovery、source detail feedback、Quiz schema v2。
-5. Phase 5：Python-native curses TUI foundation，以及第一輪 usability/question-quality 修正。
+5. Phase 5：Python-native curses TUI、第一輪 usability/question-quality 修正，以及正式 `jpnote quiz` CLI／config foundation。
 
 目前已驗證：
 
 ```text
 python -m compileall -q jpnote_app tests    PASS
-pytest -q                                  346 passed, 12 subtests passed
+pytest -q                                  355 passed, 18 subtests passed
 bash -n install.sh                          PASS
 git diff --check                           PASS
 ```
@@ -80,21 +80,24 @@ Quiz history 不寫入既有教材 `attempts`。
 - 作答支援方向鍵、Space、Enter、數字鍵、skip、details、pause/quit。
 - `reorder_4` 顯示 Backspace 退回提示。
 - 答對、答錯、skip 都顯示實際正解；答對也能確認是否猜中。
-- 使用 terminal default background，保留 Kitty 等終端原有透明度；config 開關尚待正式接入。
+- 使用 terminal default background，保留 Kitty 等終端原有透明度；已接入 config 開關。
+- 正式 `jpnote quiz` 透過 lazy loader 啟動；Quiz import/runtime failure 不阻止其他 core CLI 指令。
+- config 支援預設 mode/count、JLPT levels、sources、透明背景、history detail cap 與 session 後 pruning。
+- CLI 可用 `--mode`、`--count`、`--level`、`--source` 覆寫單次 Quiz 設定。
 
 ---
 
 ## 3. 下一個正確工作項目
 
-### Phase 5 正式 CLI／config 整合
+### Phase 5 互動式篩選／history 與安裝整合
 
 下一個 checkpoint 應完成：
 
-1. `jpnote quiz` lazy loader；Quiz import 或 curses 啟動失敗時 core CLI 仍正常。
-2. JLPT level 與 source filter 設定畫面。
-3. config：預設模式、預設題數、透明背景開關、history detail cap／prune policy。
-4. TUI history/recent/resume 入口與 shortage confirmation。
-5. installer/package smoke，但暫不建立正式 `v0.7.0` tag。
+1. TUI 內互動式 JLPT level 與 source 多選畫面。
+2. TUI recent/history/resume 入口，以及 wrong/skipped／abandoned 顯示與篩選。
+3. 題庫不足的正式互動確認畫面。
+4. `jpnote quiz` source-tree、installed-command 與 package/install smoke。
+5. 同步使用者文件與 release readiness；暫不建立正式 `v0.7.0` tag。
 
 負分／猜題扣分屬後期 optional scoring backlog，不阻塞 v1。
 
@@ -132,10 +135,10 @@ jpnote browse
 
 ### Quiz v1 尚待完成
 
-- 正式 `jpnote quiz` 指令與 lazy loading。
-- JLPT/source filters。
+- TUI 內互動式 JLPT/source filters。
 - TUI history 瀏覽、wrong/skipped filter、abandoned hide filter。
-- config 整合與正式安裝／升級流程。
+- 題庫不足正式確認畫面。
+- 正式安裝／升級流程與 package smoke。
 - release 文件、coverage、fresh install/upgrade smoke、真實 DB 副本驗證。
 
 ### 低優先
