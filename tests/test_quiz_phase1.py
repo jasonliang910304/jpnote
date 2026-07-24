@@ -209,7 +209,6 @@ class QuizPhase1ContractTests(unittest.TestCase):
 
     def test_quiz_package_has_no_forbidden_core_internal_imports(self):
         forbidden_absolute = {
-            "sqlite3",
             "jpnote_app.db",
             "jpnote_app.repository",
             "jpnote_app.cli",
@@ -229,6 +228,24 @@ class QuizPhase1ContractTests(unittest.TestCase):
                         violations.append(f"{path.name}: from {module}")
                     if node.level and module in {"db", "repository", "cli"}:
                         violations.append(f"{path.name}: relative import {module}")
+        self.assertEqual(violations, [])
+
+    def test_quiz_sqlite_usage_is_limited_to_storage_boundary(self):
+        sqlite_allowed_files = {"session_store.py"}
+        quiz_dir = Path(__file__).parents[1] / "jpnote_app" / "quiz"
+        violations: list[str] = []
+        for path in quiz_dir.glob("*.py"):
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(tree):
+                imports_sqlite = False
+                if isinstance(node, ast.Import):
+                    imports_sqlite = any(
+                        alias.name == "sqlite3" for alias in node.names
+                    )
+                elif isinstance(node, ast.ImportFrom):
+                    imports_sqlite = (node.module or "") == "sqlite3"
+                if imports_sqlite and path.name not in sqlite_allowed_files:
+                    violations.append(path.name)
         self.assertEqual(violations, [])
 
     def test_core_modules_do_not_statically_import_quiz(self):
