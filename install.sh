@@ -24,9 +24,18 @@ tmp_launcher="$BIN_DIR/.jpnote-launcher.$$"
 trap 'rm -f "$tmp_launcher"' EXIT HUP INT TERM
 cat > "$tmp_launcher" <<EOF
 #!/bin/sh
+
 JPNOTE_APP_DIR="\$HOME/.local/lib/jpnote/$VERSION"
-export PYTHONPATH="\$JPNOTE_APP_DIR\${PYTHONPATH:+:\$PYTHONPATH}"
-exec python3 -m jpnote_app "\$@"
+export JPNOTE_APP_DIR
+
+exec python3 -I -c '
+import os
+import runpy
+import sys
+
+sys.path.insert(0, os.environ["JPNOTE_APP_DIR"])
+runpy.run_module("jpnote_app", run_name="__main__", alter_sys=True)
+' "\$@"
 EOF
 chmod 755 "$tmp_launcher"
 mv -f "$tmp_launcher" "$BIN_PATH"
