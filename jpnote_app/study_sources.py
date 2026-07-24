@@ -388,6 +388,22 @@ class StudySourceService:
         snapshot = _entry_snapshot(data)
         return snapshot if snapshot.key else None
 
+    def _linked_levels_for(self, entry_keys: Iterable[str]) -> tuple[str, ...]:
+        levels: list[str] = []
+        for key in dict.fromkeys(_text(value) for value in entry_keys if _text(value)):
+            try:
+                entry = self._core.get(key)
+            except Exception as exc:
+                raise QuestionSourceUnavailableError(
+                    f"無法讀取 jpnote entry {key}：{exc}"
+                ) from exc
+            if not isinstance(entry, dict):
+                continue
+            level = _text(entry.get("level"))
+            if level and level not in levels:
+                levels.append(level)
+        return tuple(levels)
+
     def list_attempt_replay_sources(
         self,
         *,
@@ -408,7 +424,12 @@ class StudySourceService:
             data = record.get("data")
             if not isinstance(data, dict):
                 continue
-            snapshot = _attempt_snapshot(data, linked_levels=record.get("levels", ()))
+            linked_levels = _string_tuple(record.get("levels", ()))
+            if not linked_levels:
+                linked_levels = self._linked_levels_for(
+                    _string_tuple(data.get("linked_entries", ()))
+                )
+            snapshot = _attempt_snapshot(data, linked_levels=linked_levels)
             if not snapshot.event_key:
                 continue
             if source_filter and snapshot.source not in source_filter:
@@ -427,7 +448,10 @@ class StudySourceService:
             return None
         if not isinstance(data, dict):
             raise QuestionSourceUnavailableError("jpnote attempt 回傳格式錯誤")
-        snapshot = _attempt_snapshot(data)
+        linked_levels = self._linked_levels_for(
+            _string_tuple(data.get("linked_entries", ()))
+        )
+        snapshot = _attempt_snapshot(data, linked_levels=linked_levels)
         return snapshot if snapshot.event_key else None
 
     def source_catalog(self) -> SourceCatalog:
