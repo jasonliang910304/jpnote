@@ -1,4 +1,4 @@
-# jpnote v0.6.6.4
+# jpnote v0.7.0
 
 > **專案聲明**
 >
@@ -6,6 +6,26 @@
 
 本版將原本 1,200 多行的單檔腳本拆成可重用的核心模組與可選介面層。
 
+
+## v0.7.0 Optional Quiz
+
+- 新增 `jpnote quiz` Python-native TUI，支援混合／單字／錯題模式、題數、JLPT 與來源篩選。
+- Quiz 以獨立 `quiz.db` 保存 session/history，不寫入既有教材 `attempts`，也不修改 core schema v5。
+- 支援四選一、意思／讀音是非、歷史 multiple-choice 與 `reorder_4` replay；安全 distractor 不足時會 fallback 或略過，不硬湊多重正解題。
+- 支援逐題持久化、pause/resume/interrupted/abandoned、recent history、結果摘要與逐題檢視。
+- TUI 支援方向鍵、Space、Enter、數字鍵、skip、details、Backspace 重組退回、滑鼠，以及 terminal default background。
+- Quiz 採 lazy loader 與 fault isolation；Quiz 缺失或故障時，core browse/import/audit/repair/export 仍可使用。
+- Quiz history details 預設 100 MiB cap；summary 與各題型統計永久保留。
+- Release gate：`376 passed, 18 subtests passed`，app-only coverage `76%`。
+- core SQLite schema 維持 v5；Quiz 使用獨立 schema v2。
+
+快速啟動：
+
+```bash
+jpnote quiz
+jpnote quiz --mode vocabulary --count 20 --level N3
+jpnote quiz --mode mistake --source 'TRY! N3'
+```
 
 ## v0.6.6.4 Stability-gate maintenance patch
 
@@ -314,13 +334,13 @@ jpnote recent --format json           # 結構化輸出
 ## 安裝
 
 ```bash
-mkdir -p /tmp/jpnote-v0.6
+mkdir -p /tmp/jpnote-v0.7.0
 
-tar -xzf ~/Downloads/jpnote-v0.6.tar.gz \
-  -C /tmp/jpnote-v0.6 \
+tar -xzf ~/Downloads/jpnote-v0.7.0.tar.gz \
+  -C /tmp/jpnote-v0.7.0 \
   --strip-components=1
 
-/tmp/jpnote-v0.6/install.sh
+/tmp/jpnote-v0.7.0/install.sh
 jpnote init
 ```
 
@@ -346,7 +366,9 @@ jpnote_app/
 ├── presentation.py     純文字卡片、列表與 CJK 寬度處理
 ├── browsing.py         統一 browse 查詢與結構化篩選
 ├── search_normalization.py 羅馬拼音寬鬆搜尋索引
-├── preferences.py      XDG 本機偏好設定
+├── preferences.py      XDG 本機偏好設定與 Quiz 預設值
+├── study_sources.py    Quiz 使用的 stable core read contracts
+├── quiz/               可選、故障隔離的 Quiz service/store/generators/TUI
 ├── fzf_filter_helper.py 單一 fzf session 的暫存篩選狀態
 ├── ui_fzf.py           可選的 Terminal 選擇與預覽 adapter
 └── cli.py              CLI 參數與文字／JSON 路由
@@ -372,6 +394,7 @@ jpnote_app/
 - `jpnote repair`
 - list/search/browse/stats/mistakes/audit 等非互動輸出支援 JSON
 - `jpnote architecture --format json` 可檢查 fzf 耦合狀態
+- `jpnote quiz` 啟動 optional Python-native Quiz TUI
 
 ## 無 fzf 使用
 

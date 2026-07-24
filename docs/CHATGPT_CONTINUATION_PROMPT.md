@@ -14,12 +14,15 @@
 
 ## 目前基準
 
-- 正式 release：`jpnote v0.6.6.4`
+- 正式 release/tag 基準：`jpnote v0.6.6.4`（尚未切換）
+- release-candidate source version：`jpnote 0.7.0`
 - core SQLite schema：v5
 - Quiz SQLite：獨立 `quiz.db`，schema v2
 - stability gate：通過
 - Quiz 開發已完成 Phase 1–4，以及 Phase 5 TUI、usability/question-quality、正式 CLI/config、互動式 filters/history navigation、history 逐題檢視與隔離安裝 smoke
 - 最新完整測試：`376 passed, 18 subtests passed`
+- app-only coverage：`76%`
+- 隔離安裝 smoke／release-readiness audit：PASS
 
 啟動新工作階段先執行：
 
@@ -53,17 +56,15 @@ pytest -q
 
 ## 下一個正確工作項目
 
-v0.7.0 release candidate 準備：
+v0.7.0 release gate：
 
-1. 將 history export/delete TUI 入口列為非阻塞後續；headless export/delete 維持可用。
-2. 更新 VERSION、README、USER_GUIDE、CHANGELOG、release checklist。
-3. 測量 app-only coverage 並新增 release health-check。
-4. 執行 fresh install、前一版 upgrade smoke 與正式 DB 副本驗證。
-5. 準備 release patch／SHA-256；完成 gate 前不要建立 `v0.7.0` tag。
+1. 提交並確認 0.7.0 版本／文件 release-candidate checkpoint。
+2. 以正式 `jpnote.db` 副本跑 quick_check、foreign_key_check、audit、stats 與 read-only Quiz planning。
+3. 執行 v0.6.6.4 → v0.7.0 隔離 upgrade smoke。
+4. 在明確暫停匯入、建立正式 backup 後執行真實 install/installed-command smoke。
+5. 完成後才建立 annotated `v0.7.0` tag、release patch、SHA-256 與最終續接檔。
 
-正式 install/upgrade smoke 前必須明確提醒使用者短暫停止日常資料匯入。
-
-負分／猜題扣分是低優先 optional scoring backlog，不阻塞當前工作。
+TUI history export/delete、負分／猜題扣分與 response timing 是非阻塞後續。
 
 ## 日常資料匯入
 

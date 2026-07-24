@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.7.0
+
+- 新增 optional、fault-isolated Quiz 子系統；core 在 Quiz 套件缺失、匯入失敗、runtime 或 storage 錯誤時仍可正常使用 browse/import/audit/repair/export。
+- 新增獨立 `${JPNOTE_QUIZ_DB:-~/.local/share/jpnote/quiz.db}`，Quiz schema v2；不寫入既有教材 `attempts`，並保存 immutable question snapshots、active/paused/interrupted/completed/abandoned session、逐題結果與永久題型摘要。
+- Quiz history 支援 resume/abandon、100 MiB details retention、oldest-first pruning、JSON export 與安全刪除；TUI 首版提供 recent history、結果摘要與逐題檢視。Export/delete 的 TUI 入口延後，不阻塞 v1。
+- 新增 capability-based generators 與 question pool：vocabulary/mistake/mixed modes、日中四選一、意思／讀音是非、歷史 multiple-choice 與 `reorder_4` replay、安全 distractor/fallback、固定 seed 與題數不足回報。
+- 漢字詞的意思題在不造成同音歧義時優先以假名出題；錯誤讀音只使用長音、促音、撥音等細微陷阱，不再使用無關詞彙讀音。
+- 新增 Python-native curses TUI：方向鍵、Space、Enter、1–4、skip、details、pause/resume、Backspace 重組退回、滑鼠支援，以及 terminal default background／透明背景相容。
+- 新增正式 `jpnote quiz` lazy-loaded CLI 與 Quiz config；支援 mode/count、JLPT/source filters、透明背景、history detail cap 與 session 後 pruning，CLI 可用 `--mode`、`--count`、`--level`、`--source` 單次覆寫。
+- TUI 支援互動式 JLPT/source 多選、題庫不足確認、recent history、wrong/skipped 與 abandoned filters、未完成 session 繼續，以及每題題目／選項／使用者答案／正解／來源詳情。
+- 新增隔離安裝與 release-readiness audit；驗證 fresh install、reinstall launcher backup、manual path、Quiz package 缺失時的 core failure isolation、tracked secret/database guard 與 lazy loader。
+- Release candidate gate：`376 passed, 18 subtests passed`；app-only coverage `76%`；隔離安裝 smoke 與 release-readiness audit 通過。
+- core SQLite schema 維持 v5；public import JSON schema 未新增 Quiz 欄位。Quiz 使用獨立 schema v2。
+- 延後項目：TUI history export/delete 按鈕、可選負分／猜題扣分、response timing、spaced repetition 與長期趨勢。
+
 ## 0.6.6.4
 
 - grammar manual edit 改為 relation logical diff/upsert；不再以 `source_key OR target_key` 整批刪除，保留未顯示的 pending relation、未修改 relation 的 `source` 與 `created_at`，刪除時也只移除指定 logical pair 與 reciprocal/inverse。

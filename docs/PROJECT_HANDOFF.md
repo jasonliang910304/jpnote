@@ -1,8 +1,9 @@
 # jpnote 專案交接紀錄
 
 最後更新：2026-07-24（Asia/Taipei）
-正式 release 基準：`jpnote v0.6.6.4`
-目前開發 checkpoint：Quiz Phase 5 隔離安裝與 history 逐題檢視完成
+正式 release 基準：`jpnote v0.6.6.4`（正式 tag 尚未切換）
+目前 release-candidate source version：`jpnote 0.7.0`
+目前開發 checkpoint：v0.7.0 文件／版本 release candidate
 
 用途：讓新的 ChatGPT 對話或新的開發工作階段，不依賴舊聊天內容也能直接接續工作。
 
@@ -33,6 +34,9 @@
 ```text
 python -m compileall -q jpnote_app tests    PASS
 pytest -q                                  376 passed, 18 subtests passed
+app-only coverage                          76%
+isolated installed smoke                   PASS
+release-readiness audit                    PASS
 bash -n install.sh                          PASS
 git diff --check                           PASS
 ```
@@ -94,17 +98,17 @@ Quiz history 不寫入既有教材 `attempts`。
 
 ## 3. 下一個正確工作項目
 
-### v0.7.0 release candidate 準備
+### v0.7.0 release gate
 
-下一個 checkpoint 應完成：
+目前 source version、CHANGELOG、README、USER_GUIDE、release checklist 與 release-candidate health-check 已同步。下一步必須依序完成：
 
-1. 將 TUI history export/delete 入口明確延後，不阻塞 v1；headless storage/API 能力維持可用。
-2. 更新 VERSION、README、USER_GUIDE、CHANGELOG、release checklist 與 release health-check。
-3. 測量 app-only coverage，執行 fresh install 與前一版 upgrade smoke。
-4. 使用正式 DB **副本**執行 quick_check、foreign_key_check、audit、stats 與 read-only Quiz planning。
-5. 準備 release patch／SHA-256；完成 gate 前不建立正式 `v0.7.0` tag。
+1. 以正式 `jpnote.db` 的**副本**執行 `quick_check`、`foreign_key_check`、`jpnote audit`、`stats` 與 read-only Quiz planning。
+2. 執行前一版 v0.6.6.4 → v0.7.0 的隔離 upgrade smoke。
+3. 明確暫停日常匯入，建立正式 backup，再執行真實 `./install.sh` 與 installed-command smoke。
+4. 確認正式資料與 installed launcher 無回歸後，建立 release commit、annotated `v0.7.0` tag、release patch 與 SHA-256。
+5. tag 完成前正式 release 基準仍是 v0.6.6.4。
 
-進行正式安裝／升級 smoke 前，必須先明確提醒使用者短暫停止日常資料匯入。負分／猜題扣分仍屬後期 optional scoring backlog，不阻塞 v1。
+TUI history export/delete 按鈕、負分／猜題扣分與 response timing 延後，不阻塞 v0.7.0。
 
 ---
 
@@ -141,8 +145,8 @@ jpnote browse
 ### Quiz v1 尚待完成
 
 - TUI history export/delete 入口（headless export/delete 已完成；延後不阻塞 v1）。
-- 正式安裝／升級 smoke 與 release candidate 文件。
-- coverage、health-check、真實 DB 副本驗證。
+- 正式 DB 副本驗證與 v0.6.6.4 → v0.7.0 upgrade smoke。
+- 真實 installed-command smoke、release artifacts 與 annotated tag。
 
 ### 低優先
 

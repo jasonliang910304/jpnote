@@ -1,6 +1,6 @@
 # jpnote 使用者操作手冊
 
-本手冊對應 jpnote v0.6.6.4。`jpnote --help` 提供精簡指令索引；`jpnote manual` 會輸出這份完整手冊，`jpnote manual --path` 會顯示手冊檔案位置。
+本手冊對應 jpnote v0.7.0。`jpnote --help` 提供精簡指令索引；`jpnote manual` 會輸出這份完整手冊，`jpnote manual --path` 會顯示手冊檔案位置。
 
 > 原則：任何會修改資料的操作都應先確認輸入與備份；`--check` 是真正 read-only 的預檢，不會建立、升級、修復或改寫實體資料庫。
 
@@ -20,7 +20,7 @@
 
 ```bash
 mkdir -p /tmp/jpnote-install
-tar -xzf jpnote-v0.6.6.4.tar.gz -C /tmp/jpnote-install --strip-components=1
+tar -xzf jpnote-v0.7.0.tar.gz -C /tmp/jpnote-install --strip-components=1
 /tmp/jpnote-install/install.sh
 rehash
 jpnote --version
@@ -65,6 +65,7 @@ jpnote manual --path
 
 ```text
 ~/.local/share/jpnote/jpnote.db
+~/.local/share/jpnote/quiz.db
 ~/.local/share/jpnote/backups/
 ~/.local/share/jpnote/exports/
 ~/.config/jpnote/config.json
@@ -88,10 +89,13 @@ jpnote paste
 # 4. 日常瀏覽
 jpnote browse
 
-# 5. 健檢
+# 5. Quiz
+jpnote quiz
+
+# 6. 健檢
 jpnote audit
 
-# 6. 套用所有可確定的安全修正，並列出剩餘人工確認項目
+# 7. 套用所有可確定的安全修正，並列出剩餘人工確認項目
 jpnote repair --yes
 ```
 
@@ -387,6 +391,57 @@ jpnote delete 'vocab:猫' --yes
 
 沒有 `--yes` 時會要求確認。
 
+## 4.7 Quiz
+
+```bash
+jpnote quiz
+jpnote quiz --mode mixed --count 10
+jpnote quiz --mode vocabulary --count 20 --level N3
+jpnote quiz --mode mistake --source 'TRY! N3'
+```
+
+Quiz 是 optional、lazy-loaded 的 Python-native TUI。Quiz 套件缺失或故障時，其他 core 指令仍可正常使用。
+
+資料位置：
+
+```text
+core: ~/.local/share/jpnote/jpnote.db   schema v5
+Quiz: ~/.local/share/jpnote/quiz.db     schema v2
+```
+
+可用 `JPNOTE_QUIZ_DB` 指定 Quiz DB。Quiz history 不會寫入教材 `attempts`。
+
+設定畫面：
+
+```text
+↑/↓       移動
+←/→       調整模式或題數
+1–3       直接選模式
+Enter     模式 → 題數 → 開始測驗
+f         JLPT 多選
+o         來源多選
+Shift+H   recent history
+q         離開
+```
+
+作答畫面：
+
+```text
+↑/↓       移動選項
+Space     選取
+Enter     送出
+1–4       直接作答
+s         跳過
+d         顯示來源詳情
+q         暫停／退出
+```
+
+`reorder_4` 使用 Space 或 1–4 依序加入片段，Backspace 退回上一個片段，選滿四個後 Enter 送出。
+
+History 可查看 recent summary、各題型表現與逐題題目／選項／使用者答案／正解／來源詳情，也能繼續 active、paused 或 interrupted session。若 details 已依 retention 清除，只保留永久 summary。
+
+首版未提供 history export/delete 的 TUI 按鈕；底層 store/API 已支援，之後再補介面。Skip 視為 incorrect。負分／猜題扣分尚未啟用。
+
 ---
 
 # Part 5：錯題與作答紀錄
@@ -584,7 +639,7 @@ jpnote config edit
 jpnote config reset
 ```
 
-預設 browse config：
+預設 config：
 
 ```json
 {
@@ -592,11 +647,20 @@ jpnote config reset
     "types": ["grammar", "vocab"],
     "levels": [],
     "results": []
+  },
+  "quiz": {
+    "mode": "mixed",
+    "count": 10,
+    "levels": [],
+    "sources": [],
+    "transparent_background": true,
+    "history_detail_cap_mib": 100,
+    "prune_after_session": true
   }
 }
 ```
 
-`types: []` 表示全部類型。
+Browse 的 `types: []`、Quiz 的空 `levels`／`sources` 都表示不限制。`transparent_background` 使用終端預設背景；實際透明比例由 Kitty 等終端設定控制。
 
 ## 顏色
 
@@ -708,6 +772,21 @@ jpnote import FILE --check --all --format json
 ```
 
 v0.6.4 起輸入型別較嚴格：字串欄位不能用 array/object/number 代替；`options.id`、`parts.id`、reorder order 必須是真正整數，boolean 不視為 1/0。
+
+## Quiz 無法啟動
+
+```bash
+jpnote quiz --help
+jpnote config show
+```
+
+Quiz 採 lazy loading。若 optional Quiz package 或 curses 無法載入，`jpnote quiz` 會乾淨失敗而不影響其他 core 指令。可用獨立測試 DB 排查：
+
+```bash
+JPNOTE_QUIZ_DB=/tmp/jpnote-quiz-test.db jpnote quiz
+```
+
+不要把正式 `jpnote.db` 當作 Quiz DB。
 
 ## schema 太新
 
@@ -965,6 +1044,8 @@ undo
 ---
 
 # Part 14：版本變更
+
+v0.7.0 新增 optional Quiz、獨立 `quiz.db` schema v2、session/history、safe generators、正式 `jpnote quiz` CLI/config 與 Python-native TUI。Core schema 維持 v5，public import JSON schema 不變。
 
 版本差異請查看套件根目錄：
 

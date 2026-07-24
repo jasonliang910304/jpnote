@@ -1,8 +1,9 @@
 # jpnote 開發路線圖
 
 最後更新：2026-07-24（Asia/Taipei）
-正式 release 基準：v0.6.6.4
-目前開發位置：Quiz Phase 5 history 逐題檢視與隔離安裝 smoke 完成；下一步為 v0.7.0 release candidate 準備
+正式 release 基準：v0.6.6.4（正式 tag 尚未切換）
+release-candidate source version：0.7.0
+目前開發位置：v0.7.0 版本／文件與 readiness audit 完成；下一步為 DB 副本、upgrade 與真實安裝 gate
 
 ## 已通過的前置 gate
 
@@ -10,6 +11,8 @@
 - core schema 維持 v5。
 - Quiz 採獨立 `quiz.db`，目前 schema v2。
 - 最新完整 regression：`376 passed, 18 subtests passed`。
+- app-only coverage：`76%`。
+- 隔離安裝 smoke 與 release-readiness audit：通過。
 
 ## Phase 1：Quiz 契約與隔離骨架 — 完成
 
@@ -79,13 +82,14 @@
 - retention 已清除 details 時明確只顯示永久摘要。
 - 隔離 installer/package smoke 已驗證 fresh install、reinstall、manual、lazy loader 與 Quiz 缺失時的 core failure isolation。
 
-### 下一個 checkpoint：v0.7.0 release candidate 準備
+### 下一個 checkpoint：v0.7.0 release gate
 
-1. VERSION、README、USER_GUIDE、CHANGELOG 與 release checklist。
-2. app-only coverage 與 release health-check。
-3. fresh install／前一版 upgrade smoke。
-4. 正式 DB 副本 quick_check、foreign_key_check、audit、stats 與 read-only Quiz planning。
-5. release patch、SHA-256 與 continuation prompt；gate 完成前不建立 release tag。
+1. 以正式 DB 副本跑 quick_check、foreign_key_check、audit、stats 與 read-only Quiz planning。
+2. 驗證 v0.6.6.4 → v0.7.0 隔離 upgrade。
+3. 暫停匯入並執行正式 backup／install／installed-command smoke。
+4. 產生 release patch、SHA-256、annotated tag 與最終 continuation prompt。
+5. gate 完成前不建立 `v0.7.0` tag。
+
 
 ### Phase 5 後續（不阻塞 v1）
 

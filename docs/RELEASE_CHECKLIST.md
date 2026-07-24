@@ -6,6 +6,7 @@
 
 - [ ] 更新 `jpnote_app/config.py` VERSION
 - [ ] 更新 `install.sh` VERSION
+- [ ] 確認 core schema 與 optional Quiz schema 版本／相容性
 - [ ] 更新 `CHANGELOG.md`
 - [ ] 更新 `README.md`
 - [ ] 更新 `docs/USER_GUIDE.md`：指令、參數、合法操作、validation、workflow、debug
@@ -26,11 +27,15 @@
 - [ ] fresh install/init smoke test
 - [ ] 前一版 → 新版 upgrade smoke test，確認 stats／核心查詢／資料庫不被破壞
 - [ ] `jpnote --version`、`jpnote --help`、`jpnote manual` 正常
+- [ ] `jpnote quiz --help`、Quiz lazy loader 與 TUI 啟動 smoke 正常
+- [ ] Quiz package 缺失／載入失敗時 core CLI 仍正常且不顯示 traceback
+- [ ] Quiz fresh/upgrade store、pause/resume/history/pruning 與 core DB 隔離正常
 - [ ] `jpnote manual --path` 指向 bundled USER_GUIDE
 - [ ] 若 fzf 行為有變，另跑 real-fzf integration 或實機確認
 - [ ] 若 import workflow 有變，驗證完整 preflight 先於寫入、取消不改 DB、`--yes` 不繞過 validation/conflict、safe fix 後重新 preflight
 - [ ] 若 mutation／backup 有變，驗證 no-op、operation failure、post-commit export failure、corrupt backup、undo fallback
 - [ ] 若資料層有變，以真實 DB **副本**跑 quick_check、foreign_key_check、audit、stats
+- [ ] 以真實 DB **副本**執行 read-only Quiz planning，確認不修改 core DB
 
 ## Git 與交付
 
