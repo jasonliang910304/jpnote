@@ -1257,7 +1257,7 @@ class QuizTuiController:
         if question.choices and {
             choice.choice_id for choice in question.choices
         } == {"true", "false"}:
-            lines.append(f"題目判定：{feedback.correct_answer.text}")
+            lines.append(f"正確答案：{feedback.correct_answer.text}")
 
         if (
             details is not None
