@@ -11,7 +11,8 @@
 - 新增正式 `jpnote quiz` lazy-loaded CLI 與 Quiz config；支援 mode/count、JLPT/source filters、透明背景、history detail cap 與 session 後 pruning，CLI 可用 `--mode`、`--count`、`--level`、`--source` 單次覆寫。
 - TUI 支援互動式 JLPT/source 多選、題庫不足確認、recent history、wrong/skipped 與 abandoned filters、未完成 session 繼續，以及每題題目／選項／使用者答案／正解／來源詳情。
 - 新增隔離安裝與 release-readiness audit；驗證 fresh install、reinstall launcher backup、manual path、Quiz package 缺失時的 core failure isolation、tracked secret/database guard 與 lazy loader。
-- Release candidate gate：`376 passed, 18 subtests passed`；app-only coverage `76%`；隔離安裝 smoke 與 release-readiness audit 通過。
+- 修正 installed launcher 可能被目前工作目錄或 `PYTHONPATH` 中的同名 `jpnote_app` 遮蔽；新版以 `python3 -I` 與明確 versioned app path 啟動，在 repository 內外都會載入正式安裝版本。
+- 正式 release gate：`378 passed, 18 subtests passed`；app-only coverage `76%`；正式 DB 副本 quick/foreign-key/audit/stats/read-only Quiz planning、v0.6.6.4 → v0.7.0 隔離升級、真實安裝與 TUI smoke 全部通過。
 - core SQLite schema 維持 v5；public import JSON schema 未新增 Quiz 欄位。Quiz 使用獨立 schema v2。
 - 延後項目：TUI history export/delete 按鈕、可選負分／猜題扣分、response timing、spaced repetition 與長期趨勢。
 

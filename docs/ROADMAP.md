@@ -1,16 +1,16 @@
 # jpnote 開發路線圖
 
 最後更新：2026-07-24（Asia/Taipei）
-正式 release 基準：v0.6.6.4（正式 tag 尚未切換）
-release-candidate source version：0.7.0
-目前開發位置：v0.7.0 版本／文件與 readiness audit 完成；下一步為 DB 副本、upgrade 與真實安裝 gate
+正式 release 基準：v0.7.0
+正式安裝版本：0.7.0
+目前開發位置：Quiz Phase 5／v0.7.0 release 完成；進入非阻塞後續維護
 
 ## 已通過的前置 gate
 
 - v0.6.6.4 stability gate：通過。
 - core schema 維持 v5。
 - Quiz 採獨立 `quiz.db`，目前 schema v2。
-- 最新完整 regression：`376 passed, 18 subtests passed`。
+- 最新完整 regression：`378 passed, 18 subtests passed`。
 - app-only coverage：`76%`。
 - 隔離安裝 smoke 與 release-readiness audit：通過。
 
@@ -47,7 +47,7 @@ release-candidate source version：0.7.0
 - SIGINT/exception recovery。
 - source detail feedback 與 permanent question-type summaries。
 
-## Phase 5：Python-native TUI — 進行中
+## Phase 5：Python-native TUI — 完成
 
 ### 已完成
 
@@ -82,13 +82,20 @@ release-candidate source version：0.7.0
 - retention 已清除 details 時明確只顯示永久摘要。
 - 隔離 installer/package smoke 已驗證 fresh install、reinstall、manual、lazy loader 與 Quiz 缺失時的 core failure isolation。
 
-### 下一個 checkpoint：v0.7.0 release gate
+### v0.7.0 release validation — 完成
 
-1. 以正式 DB 副本跑 quick_check、foreign_key_check、audit、stats 與 read-only Quiz planning。
-2. 驗證 v0.6.6.4 → v0.7.0 隔離 upgrade。
-3. 暫停匯入並執行正式 backup／install／installed-command smoke。
-4. 產生 release patch、SHA-256、annotated tag 與最終 continuation prompt。
-5. gate 完成前不建立 `v0.7.0` tag。
+- 正式 DB 一致 snapshot：quick_check、foreign_key_check、audit、stats 通過。
+- read-only Quiz source catalog／mixed／vocabulary／mistake planning 未修改 core DB snapshot。
+- v0.6.6.4 → v0.7.0 隔離 upgrade 通過，core DB 邏輯內容不變。
+- 真實安裝、manual/config/stats、Quiz help 與 curses TUI 啟動／乾淨退出通過。
+- launcher current-directory／`PYTHONPATH` shadow 已修正並有 regression tests。
+- 正式資料：261 項、audit 0、pending relations 0；安裝後 quick/foreign-key checks 通過。
+
+### 下一個 checkpoint：post-v0.7.0 非阻塞維護
+
+1. 視實際使用需求補 history export/delete TUI 入口。
+2. 先定義 optional negative scoring／guess penalty 的明確語意與 config，再開發。
+3. 長期學習模型與 multi-writer 強化分開排程，不回頭阻塞 Quiz v1。
 
 
 ### Phase 5 後續（不阻塞 v1）

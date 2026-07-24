@@ -16,7 +16,8 @@
 - TUI 支援方向鍵、Space、Enter、數字鍵、skip、details、Backspace 重組退回、滑鼠，以及 terminal default background。
 - Quiz 採 lazy loader 與 fault isolation；Quiz 缺失或故障時，core browse/import/audit/repair/export 仍可使用。
 - Quiz history details 預設 100 MiB cap；summary 與各題型統計永久保留。
-- Release gate：`376 passed, 18 subtests passed`，app-only coverage `76%`。
+- Installed launcher 使用 isolated bootstrap，避免目前工作目錄或 `PYTHONPATH` 的同名 package 遮蔽正式安裝版本。
+- Release gate：`378 passed, 18 subtests passed`，app-only coverage `76%`；正式 DB 副本、前版升級與真實安裝 smoke 均通過。
 - core SQLite schema 維持 v5；Quiz 使用獨立 schema v2。
 
 快速啟動：
