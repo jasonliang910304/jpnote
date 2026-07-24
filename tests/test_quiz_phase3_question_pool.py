@@ -369,7 +369,7 @@ def test_selected_questions_never_repeat_exact_snapshot():
 def test_true_false_soft_constraint_avoids_extreme_ratio_when_alternatives_exist():
     # Reading-only entries generate true/false variants but no meaning MCQs.
     entries = tuple(
-        vocab(index, meaning="", reading=f"よみ{index}")
+        vocab(index, meaning="", reading=f"きって{index}")
         for index in range(1, 9)
     )
     plan = QuestionPoolBuilder(seed=18).build(

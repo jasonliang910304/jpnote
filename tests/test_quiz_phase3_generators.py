@@ -121,6 +121,8 @@ class QuizPhase3GeneratorTests(unittest.TestCase):
         self.assertEqual(len({choice.text for choice in question.choices}), 4)
         self.assertEqual(question.correct_answer.answer_id, CAT.key)
         self.assertEqual(question.correct_answer.text, "貓")
+        self.assertIn("ねこ", question.prompt)
+        self.assertNotIn("「猫」", question.prompt)
 
     def test_zh_to_ja_four_choice_uses_stable_entry_keys(self):
         question = QuestionGenerator(seed=2).vocabulary_four_choice(
@@ -145,6 +147,16 @@ class QuizPhase3GeneratorTests(unittest.TestCase):
         ids = {choice.choice_id for choice in question.choices}
         self.assertNotIn(homophone.key, ids)
         self.assertNotIn(alias_collision.key, ids)
+
+    def test_kana_prompt_falls_back_to_display_when_reading_is_ambiguous(self):
+        homophone = vocab("vocab:別語", "別語", "ねこ", "不同")
+        question = QuestionGenerator(seed=1).vocabulary_four_choice(
+            CAT,
+            (homophone, DOG, BIRD, FISH, HORSE),
+            direction="ja_to_zh",
+        )
+        assert question is not None
+        self.assertIn("「猫」", question.prompt)
 
     def test_same_or_contained_meaning_is_rejected(self):
         same = vocab("vocab:同義", "同義", "どうぎ", "貓")
@@ -189,19 +201,29 @@ class QuizPhase3GeneratorTests(unittest.TestCase):
         assert question is not None
         self.assertEqual(question.correct_answer.answer_id, "false")
         self.assertIn("狗", question.prompt)
+        self.assertIn("ねこ", question.prompt)
 
-    def test_reading_false_candidate_rejects_same_reading(self):
-        homophone = vocab("vocab:別語", "別語", "ねこ", "不同")
+    def test_reading_false_candidate_uses_only_subtle_orthographic_traps(self):
+        source = vocab("vocab:以上", "以上", "いじょう", "以上")
         question = QuestionGenerator(seed=0).vocabulary_reading_true_false(
-            CAT, (homophone, DOG), prefer_false=True
+            source, (DOG,), prefer_false=True
         )
         assert question is not None
         self.assertEqual(question.correct_answer.answer_id, "false")
-        self.assertIn("いぬ", question.prompt)
+        self.assertIn("いじょ", question.prompt)
+        self.assertNotIn("いぬ", question.prompt)
+        self.assertEqual(question.question_type, "vocab_reading_trap_long_vowel")
+
+    def test_reading_false_without_subtle_trap_is_skipped(self):
+        question = QuestionGenerator(seed=0).vocabulary_reading_true_false(
+            CAT, (DOG,), prefer_false=True
+        )
+        self.assertIsNone(question)
 
     def test_reading_traps_cover_long_vowel_sokuon_and_nasal(self):
         cases = (
             (vocab("vocab:コーヒー", "コーヒー", "コーヒー", "咖啡"), "long_vowel", "コヒー"),
+            (vocab("vocab:以上", "以上", "いじょう", "以上"), "long_vowel", "いじょ"),
             (vocab("vocab:切手", "切手", "きって", "郵票"), "sokuon", "きて"),
             (vocab("vocab:新聞", "新聞", "しんぶん", "報紙"), "moraic_nasal", "しぶん"),
         )
@@ -214,13 +236,11 @@ class QuizPhase3GeneratorTests(unittest.TestCase):
             self.assertIn(expected, question.prompt)
             self.assertEqual(question.question_type, f"vocab_reading_trap_{kind}")
 
-    def test_unavailable_reading_trap_falls_back_to_true_statement(self):
+    def test_unavailable_reading_trap_is_skipped(self):
         question = QuestionGenerator(seed=0).vocabulary_reading_true_false(
             CAT, prefer_false=True, trap_kind="long_vowel"
         )
-        assert question is not None
-        self.assertEqual(question.correct_answer.answer_id, "true")
-        self.assertEqual(question.question_type, "vocab_reading_true_false")
+        self.assertIsNone(question)
 
     def test_incomplete_vocabulary_is_skipped_fail_soft(self):
         incomplete = vocab("vocab:空", "空", "", "")

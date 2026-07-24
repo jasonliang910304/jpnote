@@ -24,6 +24,13 @@ _TRUE_CHOICE = QuestionChoiceSnapshot(choice_id="true", text="正確")
 _FALSE_CHOICE = QuestionChoiceSnapshot(choice_id="false", text="錯誤")
 _TRUTH_CHOICES = (_TRUE_CHOICE, _FALSE_CHOICE)
 _TRAILING_PUNCTUATION = "。．.，,、；;：:！？!?（）()［］[]【】「」『』\"'"
+_KANJI_RANGE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
+# Keep hiragana long-vowel traps deliberately conservative.  Broadly treating
+# every o/u-row kana followed by う as a long vowel breaks phrases such as
+# ``をうける`` across a particle/word boundary.  These patterns cover the
+# unambiguous small-kana and direct おう／えい cases; katakana uses ``ー``.
+_LONG_U_PRECEDERS = frozenset("おオょョゅュ")
+_LONG_I_PRECEDERS = frozenset("えエ")
 
 
 def _normalize_text(value: str) -> str:
@@ -54,6 +61,32 @@ def _meaning_parts(entry: EntrySnapshot) -> tuple[str, ...]:
 
 def _meaning_summary(entry: EntrySnapshot) -> str:
     return "；".join(_meaning_parts(entry))
+
+
+def _preferred_vocabulary_prompt(
+    source: EntrySnapshot,
+    pool: Sequence[EntrySnapshot],
+) -> str:
+    """Prefer kana for Chinese readers when the reading is unambiguous.
+
+    A kana-only prompt avoids giving away Sino-Japanese vocabulary through the
+    written kanji.  Homophones fall back to the display form because a reading
+    alone would make the question ambiguous.
+    """
+
+    display = source.display.strip()
+    reading = source.reading.strip()
+    if not display or not reading or not _KANJI_RANGE.search(display):
+        return display
+    reading_marker = _normalize_text(reading)
+    if not reading_marker:
+        return display
+    for candidate in pool:
+        if candidate.key == source.key:
+            continue
+        if _normalize_text(candidate.reading) == reading_marker:
+            return display
+    return reading
 
 
 def _entry_names(entry: EntrySnapshot) -> frozenset[str]:
@@ -203,7 +236,8 @@ class QuestionGenerator:
         source_meaning = _meaning_summary(source)
         if not source_meaning:
             return None
-        candidates = list(_stable_vocabulary_candidates(source, pool))
+        pool_items = tuple(pool)
+        candidates = list(_stable_vocabulary_candidates(source, pool_items))
         self._random.shuffle(candidates)
 
         distractors: list[QuestionChoiceSnapshot] = []
@@ -228,7 +262,8 @@ class QuestionGenerator:
 
         correct_choice = _choice_from_entry(source, correct_text)
         if direction == "ja_to_zh":
-            prompt = f"「{source.display}」的中文意思是？"
+            prompt_term = _preferred_vocabulary_prompt(source, pool_items)
+            prompt = f"「{prompt_term}」的中文意思是？"
             question_type = "vocab_ja_to_zh_mcq"
         else:
             prompt = f"哪一個日文詞彙最符合「{source_meaning}」？"
@@ -256,6 +291,7 @@ class QuestionGenerator:
     ) -> GeneratedQuestionSnapshot | None:
         if source.entry_type != "vocabulary" or not source.display.strip():
             return None
+        pool_items = tuple(pool)
         source_meaning = _meaning_summary(source)
         if not source_meaning:
             return None
@@ -265,7 +301,7 @@ class QuestionGenerator:
         if make_false:
             candidates = [
                 candidate
-                for candidate in _stable_vocabulary_candidates(source, pool)
+                for candidate in _stable_vocabulary_candidates(source, pool_items)
                 if _meaning_summary(candidate)
             ]
             if candidates:
@@ -276,7 +312,10 @@ class QuestionGenerator:
             question_type="vocab_meaning_true_false",
             source_kind="vocabulary",
             source_key=source.key,
-            prompt=f"「{source.display}」的意思是「{shown_meaning}」。",
+            prompt=(
+                f"「{_preferred_vocabulary_prompt(source, pool_items)}」"
+                f"的意思是「{shown_meaning}」。"
+            ),
             choices=_TRUTH_CHOICES,
             correct_answer=_truth_answer(is_true),
         )
@@ -300,21 +339,22 @@ class QuestionGenerator:
         is_true = True
         effective_type = "vocab_reading_true_false"
         if make_false:
-            trap = _reading_trap(source.reading, trap_kind) if trap_kind else None
-            if trap:
-                shown_reading = trap
-                is_true = False
-                effective_type = f"vocab_reading_trap_{trap_kind}"
-            else:
-                candidates = [
-                    candidate
-                    for candidate in _stable_vocabulary_candidates(source, pool)
-                    if candidate.reading.strip()
-                    and _normalize_text(candidate.reading) != _normalize_text(source.reading)
+            effective_trap_kind = trap_kind
+            if effective_trap_kind is None:
+                available = [
+                    kind
+                    for kind in ("long_vowel", "sokuon", "moraic_nasal")
+                    if _reading_trap(source.reading, kind) is not None
                 ]
-                if candidates:
-                    shown_reading = self._random.choice(candidates).reading.strip()
-                    is_true = False
+                if not available:
+                    return None
+                effective_trap_kind = self._random.choice(available)
+            trap = _reading_trap(source.reading, effective_trap_kind)
+            if trap is None:
+                return None
+            shown_reading = trap
+            is_true = False
+            effective_type = f"vocab_reading_trap_{effective_trap_kind}"
         return _question(
             question_type=effective_type,
             source_kind="vocabulary",
@@ -453,7 +493,24 @@ class QuestionGenerator:
 
 def _reading_trap(reading: str, trap_kind: str | None) -> str | None:
     if trap_kind == "long_vowel":
-        markers = ("ー",)
+        if "ー" in reading:
+            candidate = reading.replace("ー", "", 1).strip()
+            return candidate if candidate else None
+        for index, char in enumerate(reading):
+            if index == 0:
+                continue
+            previous = reading[index - 1]
+            if (
+                char in {"う", "ウ"}
+                and previous in _LONG_U_PRECEDERS
+            ) or (
+                char in {"い", "イ"}
+                and previous in _LONG_I_PRECEDERS
+            ):
+                candidate = (reading[:index] + reading[index + 1 :]).strip()
+                if candidate and _normalize_text(candidate) != _normalize_text(reading):
+                    return candidate
+        return None
     elif trap_kind == "sokuon":
         markers = ("っ", "ッ")
     elif trap_kind == "moraic_nasal":
