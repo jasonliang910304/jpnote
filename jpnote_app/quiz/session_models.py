@@ -104,6 +104,44 @@ class QuestionEventSnapshot:
 
 
 @dataclass(frozen=True, slots=True)
+class QuizQuestionTypeSummary:
+    question_type: str
+    answered_count: int
+    correct_count: int
+    incorrect_count: int
+    skipped_count: int
+
+    def __post_init__(self) -> None:
+        if not self.question_type.strip():
+            raise QuizValidationError("question_type 不可為空")
+        values = (
+            self.answered_count,
+            self.correct_count,
+            self.incorrect_count,
+            self.skipped_count,
+        )
+        if any(
+            isinstance(value, bool) or not isinstance(value, int) or value < 0
+            for value in values
+        ):
+            raise QuizValidationError("題型摘要計數必須是非負整數")
+        if self.answered_count != (
+            self.correct_count + self.incorrect_count + self.skipped_count
+        ):
+            raise QuizValidationError("題型摘要 answered_count 與結果計數不一致")
+
+    @property
+    def effective_incorrect_count(self) -> int:
+        return self.incorrect_count + self.skipped_count
+
+    @property
+    def accuracy(self) -> float:
+        if self.answered_count == 0:
+            return 0.0
+        return self.correct_count / self.answered_count
+
+
+@dataclass(frozen=True, slots=True)
 class QuizSessionSummary:
     session_id: str
     mode: str
@@ -119,6 +157,54 @@ class QuizSessionSummary:
     updated_at: str
     started_at: str
     ended_at: str | None
+    question_type_summaries: tuple[QuizQuestionTypeSummary, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.state not in SESSION_STATES:
+            raise QuizValidationError(f"不支援的 session state：{self.state}")
+        counts = (
+            self.requested_count,
+            self.question_count,
+            self.answered_count,
+            self.correct_count,
+            self.incorrect_count,
+            self.skipped_count,
+        )
+        if any(
+            isinstance(value, bool) or not isinstance(value, int) or value < 0
+            for value in counts
+        ):
+            raise QuizValidationError("session summary 計數必須是非負整數")
+        if self.answered_count != (
+            self.correct_count + self.incorrect_count + self.skipped_count
+        ):
+            raise QuizValidationError("session summary answered_count 與結果計數不一致")
+        if self.answered_count > self.question_count:
+            raise QuizValidationError("answered_count 不可大於 question_count")
+        summary_types = [item.question_type for item in self.question_type_summaries]
+        if len(summary_types) != len(set(summary_types)):
+            raise QuizValidationError("session 題型摘要不可重複")
+        if self.question_type_summaries:
+            if (
+                sum(item.answered_count for item in self.question_type_summaries)
+                != self.answered_count
+            ):
+                raise QuizValidationError("題型摘要 answered_count 總和不一致")
+            if (
+                sum(item.correct_count for item in self.question_type_summaries)
+                != self.correct_count
+            ):
+                raise QuizValidationError("題型摘要 correct_count 總和不一致")
+            if (
+                sum(item.incorrect_count for item in self.question_type_summaries)
+                != self.incorrect_count
+            ):
+                raise QuizValidationError("題型摘要 incorrect_count 總和不一致")
+            if (
+                sum(item.skipped_count for item in self.question_type_summaries)
+                != self.skipped_count
+            ):
+                raise QuizValidationError("題型摘要 skipped_count 總和不一致")
 
     @property
     def effective_incorrect_count(self) -> int:

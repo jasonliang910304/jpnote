@@ -22,6 +22,7 @@ from .session_models import (
     QuestionChoiceSnapshot,
     QuestionEventSnapshot,
     QuizPruneResult,
+    QuizQuestionTypeSummary,
     QuizSessionSnapshot,
     QuizSessionSummary,
     QuizValidationError,
@@ -29,8 +30,8 @@ from .session_models import (
     TERMINAL_SESSION_STATES,
 )
 
-QUIZ_SCHEMA_VERSION = 1
-QUIZ_HISTORY_EXPORT_VERSION = 1
+QUIZ_SCHEMA_VERSION = 2
+QUIZ_HISTORY_EXPORT_VERSION = 2
 DEFAULT_DETAIL_CAP_BYTES = 100 * 1024 * 1024
 
 _DETAIL_SIZE_EXPRESSION = """
@@ -137,6 +138,103 @@ def _choices_from_json(raw: str) -> tuple[QuestionChoiceSnapshot, ...]:
         raise QuizStorageUnavailableError(f"Quiz choices snapshot 格式錯誤：{exc}") from exc
 
 
+def _question_type_summaries_to_json(
+    summaries: Sequence[QuizQuestionTypeSummary],
+) -> str:
+    return _json_dump(
+        [
+            {
+                "question_type": summary.question_type,
+                "answered_count": summary.answered_count,
+                "correct_count": summary.correct_count,
+                "incorrect_count": summary.incorrect_count,
+                "skipped_count": summary.skipped_count,
+            }
+            for summary in summaries
+        ]
+    )
+
+
+def _question_type_summaries_from_json(
+    raw: str | None,
+) -> tuple[QuizQuestionTypeSummary, ...]:
+    if raw is None:
+        return ()
+    try:
+        data = json.loads(raw)
+        if not isinstance(data, list):
+            raise QuizValidationError("question type summary 必須是 array")
+        result: list[QuizQuestionTypeSummary] = []
+        seen: set[str] = set()
+        for item in data:
+            if not isinstance(item, dict):
+                raise QuizValidationError("question type summary item 必須是 object")
+            question_type = item.get("question_type", "")
+            values = (
+                item.get("answered_count"),
+                item.get("correct_count"),
+                item.get("incorrect_count"),
+                item.get("skipped_count"),
+            )
+            if not isinstance(question_type, str):
+                raise QuizValidationError("question_type 必須是字串")
+            if question_type in seen:
+                raise QuizValidationError("question type summary 不可重複")
+            seen.add(question_type)
+            if any(
+                isinstance(value, bool) or not isinstance(value, int)
+                for value in values
+            ):
+                raise QuizValidationError("question type summary 計數必須是整數")
+            result.append(
+                QuizQuestionTypeSummary(
+                    question_type=question_type,
+                    answered_count=values[0],
+                    correct_count=values[1],
+                    incorrect_count=values[2],
+                    skipped_count=values[3],
+                )
+            )
+        return tuple(sorted(result, key=lambda summary: summary.question_type))
+    except (json.JSONDecodeError, QuizValidationError) as exc:
+        raise QuizStorageUnavailableError(
+            f"Quiz question type summary 格式錯誤：{exc}"
+        ) from exc
+
+
+def _increment_question_type_summary(
+    summaries: Sequence[QuizQuestionTypeSummary],
+    *,
+    question_type: str,
+    result: str,
+) -> tuple[QuizQuestionTypeSummary, ...]:
+    counters = {
+        summary.question_type: {
+            "answered": summary.answered_count,
+            "correct": summary.correct_count,
+            "incorrect": summary.incorrect_count,
+            "skipped": summary.skipped_count,
+        }
+        for summary in summaries
+    }
+    bucket = counters.setdefault(
+        question_type,
+        {"answered": 0, "correct": 0, "incorrect": 0, "skipped": 0},
+    )
+    bucket["answered"] += 1
+    bucket[result] += 1
+    return tuple(
+        QuizQuestionTypeSummary(
+            question_type=kind,
+            answered_count=values["answered"],
+            correct_count=values["correct"],
+            incorrect_count=values["incorrect"],
+            skipped_count=values["skipped"],
+        )
+        for kind, values in sorted(counters.items())
+    )
+
+
 def _secure_directory(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
     try:
@@ -193,7 +291,11 @@ class QuizSessionStore:
                 )
             if current < 1:
                 self._apply_schema_v1(conn)
-                conn.execute(f"PRAGMA user_version={QUIZ_SCHEMA_VERSION}")
+                current = 1
+            if current < 2:
+                self._apply_schema_v2(conn)
+                current = 2
+            conn.execute(f"PRAGMA user_version={current}")
             conn.commit()
         except Exception as exc:
             if conn is not None:
@@ -261,6 +363,67 @@ class QuizSessionStore:
         )
         for statement in statements:
             conn.execute(statement)
+
+    def _apply_schema_v2(self, conn: sqlite3.Connection) -> None:
+        conn.execute(
+            """
+            ALTER TABLE quiz_sessions
+            ADD COLUMN question_type_summary_json TEXT NOT NULL DEFAULT '[]'
+            """
+        )
+        sessions = conn.execute(
+            """
+            SELECT session_id FROM quiz_sessions
+            WHERE details_pruned=0
+            ORDER BY session_id
+            """
+        ).fetchall()
+        for session in sessions:
+            rows = conn.execute(
+                """
+                SELECT question_type, result, COUNT(*) AS count
+                FROM quiz_question_events
+                WHERE session_id=? AND result IS NOT NULL
+                GROUP BY question_type, result
+                ORDER BY question_type, result
+                """,
+                (session["session_id"],),
+            ).fetchall()
+            counters: dict[str, dict[str, int]] = {}
+            for row in rows:
+                question_type = str(row["question_type"])
+                result = str(row["result"])
+                if result not in QUESTION_RESULTS:
+                    raise QuizValidationError(
+                        f"migration 遇到不支援的 Quiz result：{result}"
+                    )
+                bucket = counters.setdefault(
+                    question_type,
+                    {"answered": 0, "correct": 0, "incorrect": 0, "skipped": 0},
+                )
+                count = int(row["count"])
+                bucket["answered"] += count
+                bucket[result] += count
+            summaries = tuple(
+                QuizQuestionTypeSummary(
+                    question_type=question_type,
+                    answered_count=values["answered"],
+                    correct_count=values["correct"],
+                    incorrect_count=values["incorrect"],
+                    skipped_count=values["skipped"],
+                )
+                for question_type, values in sorted(counters.items())
+            )
+            conn.execute(
+                """
+                UPDATE quiz_sessions SET question_type_summary_json=?
+                WHERE session_id=?
+                """,
+                (
+                    _question_type_summaries_to_json(summaries),
+                    session["session_id"],
+                ),
+            )
 
     def create_session(
         self,
@@ -376,11 +539,34 @@ class QuizSessionStore:
             conn.close()
 
     def list_recent_sessions(
-        self, *, limit: int = 20, include_abandoned: bool = True
+        self,
+        *,
+        limit: int = 20,
+        include_abandoned: bool = True,
+        states: Sequence[str] | None = None,
     ) -> tuple[QuizSessionSummary, ...]:
         if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
             raise QuizValidationError("limit 必須是正整數")
-        where = "" if include_abandoned else "WHERE state <> 'abandoned'"
+
+        clauses: list[str] = []
+        parameters: list[Any] = []
+        if states is not None:
+            normalized_states = tuple(dict.fromkeys(str(state) for state in states))
+            invalid_states = set(normalized_states) - SESSION_STATES
+            if invalid_states:
+                raise QuizValidationError(
+                    f"不支援的 session state：{sorted(invalid_states)[0]}"
+                )
+            if not normalized_states:
+                return ()
+            placeholders = ", ".join("?" for _ in normalized_states)
+            clauses.append(f"state IN ({placeholders})")
+            parameters.extend(normalized_states)
+        if not include_abandoned:
+            clauses.append("state <> 'abandoned'")
+
+        where = "" if not clauses else "WHERE " + " AND ".join(clauses)
+        parameters.append(limit)
         conn = self._connect()
         try:
             rows = conn.execute(
@@ -390,7 +576,7 @@ class QuizSessionStore:
                 ORDER BY updated_at DESC, session_id DESC
                 LIMIT ?
                 """,
-                (limit,),
+                tuple(parameters),
             ).fetchall()
             return tuple(self._summary_from_row(row) for row in rows)
         except sqlite3.Error as exc:
@@ -744,6 +930,18 @@ class QuizSessionStore:
             "skipped_count": summary.skipped_count,
             "effective_incorrect_count": summary.effective_incorrect_count,
             "accuracy": summary.accuracy,
+            "question_type_summaries": [
+                {
+                    "question_type": item.question_type,
+                    "answered_count": item.answered_count,
+                    "correct_count": item.correct_count,
+                    "incorrect_count": item.incorrect_count,
+                    "skipped_count": item.skipped_count,
+                    "effective_incorrect_count": item.effective_incorrect_count,
+                    "accuracy": item.accuracy,
+                }
+                for item in summary.question_type_summaries
+            ],
             "details_pruned": summary.details_pruned,
             "created_at": summary.created_at,
             "updated_at": summary.updated_at,
@@ -925,6 +1123,13 @@ class QuizSessionStore:
             correct_inc = 1 if result == "correct" else 0
             incorrect_inc = 1 if result == "incorrect" else 0
             skipped_inc = 1 if result == "skipped" else 0
+            question_type_summaries = _increment_question_type_summary(
+                _question_type_summaries_from_json(
+                    session_row["question_type_summary_json"]
+                ),
+                question_type=str(next_row["question_type"]),
+                result=result,
+            )
             answered_after = int(session_row["answered_count"]) + 1
             completes = answered_after == int(session_row["question_count"])
             next_state = "completed" if completes else "active"
@@ -936,6 +1141,7 @@ class QuizSessionStore:
                     correct_count=correct_count+?,
                     incorrect_count=incorrect_count+?,
                     skipped_count=skipped_count+?,
+                    question_type_summary_json=?,
                     updated_at=?, ended_at=?
                 WHERE session_id=?
                 """,
@@ -944,6 +1150,7 @@ class QuizSessionStore:
                     correct_inc,
                     incorrect_inc,
                     skipped_inc,
+                    _question_type_summaries_to_json(question_type_summaries),
                     now,
                     ended_at,
                     session_id,
@@ -1025,22 +1232,34 @@ class QuizSessionStore:
 
     @staticmethod
     def _summary_from_row(row: sqlite3.Row) -> QuizSessionSummary:
-        return QuizSessionSummary(
-            session_id=str(row["session_id"]),
-            mode=str(row["mode"]),
-            requested_count=int(row["requested_count"]),
-            question_count=int(row["question_count"]),
-            state=str(row["state"]),
-            answered_count=int(row["answered_count"]),
-            correct_count=int(row["correct_count"]),
-            incorrect_count=int(row["incorrect_count"]),
-            skipped_count=int(row["skipped_count"]),
-            details_pruned=bool(row["details_pruned"]),
-            created_at=str(row["created_at"]),
-            updated_at=str(row["updated_at"]),
-            started_at=str(row["started_at"]),
-            ended_at=None if row["ended_at"] is None else str(row["ended_at"]),
-        )
+        try:
+            return QuizSessionSummary(
+                session_id=str(row["session_id"]),
+                mode=str(row["mode"]),
+                requested_count=int(row["requested_count"]),
+                question_count=int(row["question_count"]),
+                state=str(row["state"]),
+                answered_count=int(row["answered_count"]),
+                correct_count=int(row["correct_count"]),
+                incorrect_count=int(row["incorrect_count"]),
+                skipped_count=int(row["skipped_count"]),
+                details_pruned=bool(row["details_pruned"]),
+                created_at=str(row["created_at"]),
+                updated_at=str(row["updated_at"]),
+                started_at=str(row["started_at"]),
+                ended_at=(
+                    None if row["ended_at"] is None else str(row["ended_at"])
+                ),
+                question_type_summaries=_question_type_summaries_from_json(
+                    row["question_type_summary_json"]
+                ),
+            )
+        except QuizStorageUnavailableError:
+            raise
+        except (QuizValidationError, TypeError, ValueError) as exc:
+            raise QuizStorageUnavailableError(
+                f"Quiz session summary 格式錯誤：{exc}"
+            ) from exc
 
     @staticmethod
     def _question_from_row(row: sqlite3.Row) -> QuestionEventSnapshot:
