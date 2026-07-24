@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-VERSION="0.6.6.3"
+VERSION="0.6.6.4"
 SOURCE_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 TARGET_ROOT="$HOME/.local/lib/jpnote/$VERSION"
 BIN_DIR="$HOME/.local/bin"

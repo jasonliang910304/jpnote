@@ -7,13 +7,15 @@ import re
 import shutil
 import sqlite3
 import tempfile
-from contextlib import contextmanager
+import time
+from contextlib import closing, contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Iterator
 
 from .config import (
+    AUXILIARY_BACKUP_MAX_BYTES,
     BACKUP_MAX_BYTES,
     SCHEMA_VERSION,
     backup_dir,
@@ -213,7 +215,7 @@ def now() -> datetime:
 
 
 def now_text() -> str:
-    return now().isoformat(timespec="seconds")
+    return now().isoformat(timespec="microseconds")
 
 
 def timestamp_for_filename() -> str:
@@ -232,6 +234,65 @@ def sanitize_label(label: str) -> str:
     return cleaned or "change"
 
 
+PENDING_BACKUP_LEGACY_GRACE_SECONDS = 300
+
+
+def _pending_owner_pid(path: Path) -> int | None:
+    match = re.search(r"-pid(\d+)-", path.name)
+    return int(match.group(1)) if match else None
+
+
+def _pid_is_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def recover_orphaned_pending_backups(*, now_timestamp: float | None = None) -> list[Path]:
+    """Promote valid crash-left pending snapshots into the undo pool.
+
+    New pending filenames carry their owner PID, so a second jpnote process
+    never steals an in-progress snapshot. Legacy pending files without a PID
+    are promoted only after a grace period. Corrupt files are left untouched
+    for manual inspection instead of being silently deleted.
+    """
+    ensure_directories()
+    current_time = time.time() if now_timestamp is None else now_timestamp
+    recovered: list[Path] = []
+    for pending in sorted(backup_dir().glob(".pending-*.db")):
+        try:
+            stat_result = pending.stat()
+        except FileNotFoundError:
+            continue
+        owner_pid = _pending_owner_pid(pending)
+        if owner_pid is not None:
+            if _pid_is_alive(owner_pid):
+                continue
+        elif current_time - stat_result.st_mtime < PENDING_BACKUP_LEGACY_GRACE_SECONDS:
+            continue
+        if not _sqlite_integrity_ok(pending):
+            continue
+
+        stem = pending.name.removeprefix(".pending-").removesuffix(".db")
+        destination = backup_dir() / f"undo-{stem}-recovered.db"
+        serial = 1
+        while destination.exists():
+            destination = backup_dir() / f"undo-{stem}-recovered-{serial}.db"
+            serial += 1
+        os.replace(pending, destination)
+        ensure_private_file(destination)
+        recovered.append(destination)
+    if recovered:
+        prune_backups()
+    return recovered
+
+
 def active_backups() -> list[Path]:
     ensure_directories()
     paths = sorted(backup_dir().glob("undo-*.db"), key=lambda path: path.stat().st_mtime)
@@ -244,11 +305,37 @@ def _sqlite_integrity_ok(path: Path) -> bool:
     if not path.is_file():
         return False
     try:
-        with sqlite3.connect(f"file:{path}?mode=ro", uri=True) as conn:
+        with closing(sqlite3.connect(f"file:{path}?mode=ro", uri=True)) as conn:
             row = conn.execute("PRAGMA quick_check").fetchone()
         return bool(row and str(row[0]).lower() == "ok")
     except sqlite3.Error:
         return False
+
+
+def backup_integrity_ok(path: Path) -> bool:
+    """Public integrity check used by backup listing and selective undo."""
+    return _sqlite_integrity_ok(path)
+
+
+def auxiliary_backups() -> list[Path]:
+    """Return recovery snapshots and already-used backups, oldest first."""
+    ensure_directories()
+    paths = [*backup_dir().glob("recovery-*.db"), *restored_backup_dir().glob("*.db")]
+    paths = sorted((path for path in paths if path.is_file()), key=lambda path: path.stat().st_mtime)
+    for path in paths:
+        ensure_private_file(path)
+    return paths
+
+
+def prune_auxiliary_backups() -> None:
+    """Bound recovery/restored history separately from active undo snapshots."""
+    paths = auxiliary_backups()
+    total = sum(path.stat().st_size for path in paths)
+    while total > AUXILIARY_BACKUP_MAX_BYTES and len(paths) > 1:
+        oldest = paths.pop(0)
+        size = oldest.stat().st_size
+        oldest.unlink(missing_ok=True)
+        total -= size
 
 
 def active_backup_bytes() -> int:
@@ -278,7 +365,7 @@ def _create_sqlite_snapshot(destination: Path) -> Path:
     os.close(fd)
     temp_path = Path(temp_name)
     try:
-        with sqlite3.connect(source_path) as source, sqlite3.connect(temp_path) as target:
+        with closing(sqlite3.connect(source_path)) as source, closing(sqlite3.connect(temp_path)) as target:
             source.backup(target)
         ensure_private_file(temp_path)
         try:
@@ -358,7 +445,7 @@ def mutation_backup(label: str) -> Iterator[MutationBackupHandle]:
     stamp = timestamp_for_filename()
     suffix = sanitize_label(label)
     final_path = backup_dir() / f"undo-{stamp}-{suffix}.db"
-    pending_path = backup_dir() / f".pending-{stamp}-{suffix}.db"
+    pending_path = backup_dir() / f".pending-{stamp}-pid{os.getpid()}-{suffix}.db"
     _create_sqlite_snapshot(pending_path)
     handle = MutationBackupHandle(final_path)
     try:
@@ -389,7 +476,9 @@ def create_recovery_snapshot(label: str) -> Path | None:
     if not path.exists():
         return None
     destination = backup_dir() / f"recovery-{timestamp_for_filename()}-{sanitize_label(label)}.db"
-    return _create_sqlite_snapshot(destination)
+    result = _create_sqlite_snapshot(destination)
+    prune_auxiliary_backups()
+    return result
 
 
 def restore_database_from(backup_path: Path) -> None:
@@ -402,7 +491,7 @@ def restore_database_from(backup_path: Path) -> None:
     os.close(fd)
     temp_path = Path(temp_name)
     try:
-        with sqlite3.connect(backup_path) as source, sqlite3.connect(temp_path) as target:
+        with closing(sqlite3.connect(backup_path)) as source, closing(sqlite3.connect(temp_path)) as target:
             source.backup(target)
         for suffix in ("-wal", "-shm", "-journal"):
             Path(str(db_path()) + suffix).unlink(missing_ok=True)
@@ -542,7 +631,7 @@ def connect_preflight() -> ManagedConnection:
     path = db_path()
     try:
         if path.exists():
-            with sqlite3.connect(f"file:{path}?mode=ro", uri=True) as source:
+            with closing(sqlite3.connect(f"file:{path}?mode=ro", uri=True)) as source:
                 source.backup(conn)
         migrate_schema(
             conn, create_migration_backup=False, prune_after=False, normalize_relation_values=False
@@ -556,6 +645,7 @@ def connect_preflight() -> ManagedConnection:
 
 def connect() -> ManagedConnection:
     ensure_directories()
+    recover_orphaned_pending_backups()
     conn = sqlite3.connect(db_path(), factory=ManagedConnection)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
@@ -577,4 +667,5 @@ def move_used_backup(path: Path) -> Path:
     destination = restored_backup_dir() / path.name
     shutil.move(str(path), str(destination))
     ensure_private_file(destination)
+    prune_auxiliary_backups()
     return destination

@@ -301,6 +301,19 @@ def build_preflight_report(conn: sqlite3.Connection, plan: ImportPlan) -> dict[s
     }
 
 
+
+def blocking_preflight_messages(report: dict[str, Any]) -> list[str]:
+    """Return safety conflicts that no caller may bypass with confirmation."""
+    summary = report["summary"]
+    messages: list[str] = []
+    if summary.get("conflicting_attempts", 0):
+        messages.append(f"{summary['conflicting_attempts']} 筆作答 identity 衝突")
+    if summary.get("attempts_with_missing_links", 0):
+        messages.append(f"{summary['attempts_with_missing_links']} 筆作答缺少 linked_entries")
+    if summary.get("pending_relation_conflicts", 0):
+        messages.append(f"{summary['pending_relation_conflicts']} 筆 pending relation note 衝突")
+    return messages
+
 def _brief_text(entry: dict[str, Any]) -> str:
     if not entry:
         return ""

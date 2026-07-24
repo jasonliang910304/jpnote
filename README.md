@@ -1,10 +1,21 @@
+# jpnote v0.6.6.4
+
 > **專案聲明**
 >
 > jpnote 的構想、功能需求、使用情境與開發方向由 **Jason Liang** 提供；本專案的所有程式碼均由 **OpenAI ChatGPT** 產生。Jason Liang 負責實際使用、測試、問題回報，以及功能與設計取捨。
 
-# jpnote v0.6.6.3
-
 本版將原本 1,200 多行的單檔腳本拆成可重用的核心模組與可選介面層。
+
+
+## v0.6.6.4 Stability-gate maintenance patch
+
+- `jpnote edit` 的 grammar relation 改為 logical diff/upsert；只移除明確刪除的關聯，不再整批刪除 touching rows，因此 pending relation 與未修改 relation 的 provenance 會保留。
+- 新增 `jpnote_app.mutations` 共用 safe mutation pipeline，CLI 與 `JpnoteCore` 寫入都統一經過 backup、transaction 與 Markdown refresh；public import API 也強制 blocking preflight。
+- 所有 raw SQLite helper connection 都會顯式關閉，避免未來長駐 Quiz TUI 累積 file descriptors。
+- crash 留下的 `.pending-*` snapshot 會在下次 writable 啟動時安全辨識並提升為 undo backup；活著的 process 所持有 snapshot 不會被誤收。
+- `jpnote undo` 可列出或指定較舊 backup；預設會略過損壞的最新 backup，並在建立 recovery snapshot 前先驗證目標。
+- recovery/restored backup 另設 50 MiB retention cap；entry timestamp 改用微秒，explicit import selector 拼錯或超出範圍會直接報錯。
+- SQLite schema 仍為 v5；public import JSON schema 沒有新增欄位。
 
 
 ## v0.6.6.3 Import safety / data-quality patch

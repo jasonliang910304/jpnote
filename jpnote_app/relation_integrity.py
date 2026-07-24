@@ -100,8 +100,16 @@ def _replace_identity_row(
     relation_type: str,
     note: str,
     source: str,
+    *,
+    preserve_existing_source: bool = False,
 ) -> tuple[int, int]:
-    """Ensure exactly one logical relation row; return (added, updated)."""
+    """Ensure exactly one logical relation row; return (added, updated).
+
+    Manual edits may change relation metadata without changing where the
+    relation originally came from.  ``preserve_existing_source`` keeps each
+    physical row's existing provenance when replacing a logical identity, while
+    still using ``source`` for a genuinely new row.
+    """
     rows = _rows_for_identity(conn, table, source_key, target_key, relation_type)
     if _identity_is_exact(rows, note):
         return 0, 0
@@ -113,11 +121,12 @@ def _replace_identity_row(
             f"DELETE FROM {table} WHERE source_key=? AND target_key=? AND relation_type=?",
             (source_key, target_key, relation_type),
         )
+        replacement_source = (existing_source or source) if preserve_existing_source else (source or existing_source)
         conn.execute(
             f"""INSERT INTO {table}(
                 source_key, target_key, relation_type, note, source, created_at
             ) VALUES(?, ?, ?, ?, ?, ?)""",
-            (source_key, target_key, relation_type, note, source or existing_source, created_at),
+            (source_key, target_key, relation_type, note, replacement_source, created_at),
         )
         return 0, 1
 
@@ -137,6 +146,8 @@ def upsert_relation(
     relation_type: str,
     note: str,
     source: str,
+    *,
+    preserve_existing_source: bool = False,
 ) -> RelationApplyResult:
     """Apply one relation using logical identity instead of note-as-identity."""
     if source_key == target_key:
@@ -155,7 +166,8 @@ def upsert_relation(
             (source_key, target_key, relation_type),
         )
         a, u = _replace_identity_row(
-            conn, "pending_grammar_relations", source_key, target_key, relation_type, note, source
+            conn, "pending_grammar_relations", source_key, target_key, relation_type, note, source,
+            preserve_existing_source=preserve_existing_source,
         )
         pending += a
         updated += u
@@ -173,19 +185,48 @@ def upsert_relation(
         updated += 1
 
     a, u = _replace_identity_row(
-        conn, "grammar_relations", source_key, target_key, relation_type, note, source
+        conn, "grammar_relations", source_key, target_key, relation_type, note, source,
+        preserve_existing_source=preserve_existing_source,
     )
     added += a
     updated += u
     reciprocal = reciprocal_type(relation_type)
     if reciprocal is not None:
         a, u = _replace_identity_row(
-            conn, "grammar_relations", target_key, source_key, reciprocal, note, source
+            conn, "grammar_relations", target_key, source_key, reciprocal, note, source,
+            preserve_existing_source=preserve_existing_source,
         )
         added += a
         updated += u
     return RelationApplyResult(before, added, updated, pending)
 
+
+
+def delete_logical_relation(
+    conn: sqlite3.Connection,
+    source_key: str,
+    target_key: str,
+    relation_type: str,
+) -> int:
+    """Delete one public relation and its reciprocal/inverse row only.
+
+    This intentionally avoids broad ``source_key OR target_key`` deletion.
+    Manual editing one entry must not erase unrelated incoming relations or
+    unresolved pending relations attached to that entry.
+    """
+    removed = 0
+    identities = [(source_key, target_key, relation_type)]
+    reciprocal = reciprocal_type(relation_type)
+    if reciprocal is not None:
+        identities.append((target_key, source_key, reciprocal))
+    for table in ("grammar_relations", "pending_grammar_relations"):
+        for left, right, kind in identities:
+            cursor = conn.execute(
+                f"DELETE FROM {table} WHERE source_key=? AND target_key=? AND relation_type=?",
+                (left, right, kind),
+            )
+            removed += max(int(cursor.rowcount or 0), 0)
+    return removed
 
 def _safe_note(rows: list[sqlite3.Row]) -> str | None:
     nonempty = {str(row["note"] or "").strip() for row in rows if str(row["note"] or "").strip()}

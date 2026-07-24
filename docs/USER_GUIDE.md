@@ -1,6 +1,6 @@
 # jpnote 使用者操作手冊
 
-本手冊對應 jpnote v0.6.6.3。`jpnote --help` 提供精簡指令索引；`jpnote manual` 會輸出這份完整手冊，`jpnote manual --path` 會顯示手冊檔案位置。
+本手冊對應 jpnote v0.6.6.4。`jpnote --help` 提供精簡指令索引；`jpnote manual` 會輸出這份完整手冊，`jpnote manual --path` 會顯示手冊檔案位置。
 
 > 原則：任何會修改資料的操作都應先確認輸入與備份；`--check` 是真正 read-only 的預檢，不會建立、升級、修復或改寫實體資料庫。
 
@@ -20,7 +20,7 @@
 
 ```bash
 mkdir -p /tmp/jpnote-install
-tar -xzf jpnote-v0.6.6.3.tar.gz -C /tmp/jpnote-install --strip-components=1
+tar -xzf jpnote-v0.6.6.4.tar.gz -C /tmp/jpnote-install --strip-components=1
 /tmp/jpnote-install/install.sh
 rehash
 jpnote --version
@@ -561,11 +561,16 @@ Undo backup 使用總容量 50 MiB 上限，從最舊開始清理；至少保留
 
 ```bash
 jpnote undo
+jpnote undo --list
+jpnote undo --backup 2
+jpnote undo --backup undo-20260724T120000-000000-edit.db
 ```
 
-復原前會檢查 SQLite backup integrity；損壞備份不會覆蓋目前 DB。
+`--backup` 可使用 `jpnote backups` 顯示的 1 起算編號或完整檔名。沒有指定時，jpnote 會選擇最新且通過 SQLite integrity check 的 backup；若最新一份已損壞，會提示並退回較舊的有效版本。指定損壞 backup 時會在建立 recovery snapshot 之前拒絕。
 
-會修改資料的 CLI 工作流程通常會先建立 pending snapshot，只有資料庫確實發生變更時才正式發布成 undo backup；完全相同的 re-import、no-op edit 或沒有任何可修項目的 repair 不會占用 undo pool。若資料庫已成功提交、但後續 Markdown export 失敗，pre-mutation backup 仍會保留供復原。
+會修改資料的 CLI／public API 工作流程都經過共用 safe mutation pipeline：先建立 pending snapshot，只有資料庫確實發生變更時才正式發布成 undo backup。完全相同的 re-import、no-op edit 或沒有任何可修項目的 repair 不會占用 undo pool。若 process 在 snapshot 建立後異常終止，下次 writable 啟動會把可確認為 orphan 的有效 `.pending-*` 提升為 undo backup；活著 process 的 snapshot 不會被拿走。
+
+Active undo pool 與 recovery/restored history 各自有 50 MiB 上限，超過時從最舊開始清理，且至少保留最新一份。
 
 ---
 
@@ -775,7 +780,7 @@ jpnote export [--format text|json]
 jpnote stats [--format text|json]
 jpnote backup [LABEL]
 jpnote backups
-jpnote undo
+jpnote undo [--list] [--backup NUMBER_OR_FILENAME]
 jpnote architecture [--format text|json]
 ```
 

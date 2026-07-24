@@ -3,19 +3,23 @@ from __future__ import annotations
 import os
 import stat
 import tempfile
+from argparse import Namespace
 import unittest
 from pathlib import Path
 
 import jpnote_app.db as db_module
 from jpnote_app.attempt_options import suspicious_option_migration_candidates
-from jpnote_app.config import backup_dir, data_dir, db_path, export_dir
+from jpnote_app.config import backup_dir, data_dir, db_path, export_dir, restored_backup_dir
 from jpnote_app.db import (
     active_backups,
+    auxiliary_backups,
     connect,
     create_backup,
+    prune_auxiliary_backups,
     prune_backups,
     restore_database_from,
 )
+from jpnote_app.cli import command_undo
 from jpnote_app.export_markdown import export_all
 from jpnote_app.fzf_filter_helper import SHORTCUT_TOKENS, render_panel
 from jpnote_app.preferences import write_preferences
@@ -70,6 +74,59 @@ class StorageReliabilityTests(unittest.TestCase):
             db_module.BACKUP_MAX_BYTES = old_cap
         remaining = active_backups()
         self.assertEqual(remaining, [paths[-1]])
+
+    def test_undo_falls_back_to_older_valid_backup(self) -> None:
+        with connect() as conn:
+            apply_import(conn, prepare_import(conn, {"items": [{
+                "key": "vocab:猫", "type": "vocabulary", "display": "猫"
+            }]}))
+        older = create_backup("older-valid")
+        self.assertIsNotNone(older)
+        with connect() as conn:
+            apply_import(conn, prepare_import(conn, {"items": [{
+                "key": "vocab:犬", "type": "vocabulary", "display": "犬"
+            }]}))
+        corrupt = backup_dir() / "undo-99999999T999999-999999-corrupt.db"
+        corrupt.write_bytes(b"not sqlite")
+        os.utime(corrupt, (9999999999, 9999999999))
+
+        result = command_undo(Namespace(list=False, backup=None))
+
+        self.assertEqual(result, 0)
+        with connect() as conn:
+            keys = {row[0] for row in conn.execute("SELECT key FROM entries").fetchall()}
+        self.assertIn("vocab:猫", keys)
+        self.assertNotIn("vocab:犬", keys)
+        self.assertTrue(corrupt.exists())
+
+    def test_selecting_corrupt_backup_does_not_create_recovery_snapshot(self) -> None:
+        with connect():
+            pass
+        corrupt = backup_dir() / "undo-20260724T000000-000000-corrupt.db"
+        corrupt.write_bytes(b"not sqlite")
+        before = list(auxiliary_backups())
+        with self.assertRaisesRegex(ValueError, "已損壞"):
+            command_undo(Namespace(list=False, backup=corrupt.name))
+        self.assertEqual(auxiliary_backups(), before)
+
+    def test_auxiliary_backups_are_pruned_by_total_size(self) -> None:
+        backup_dir().mkdir(parents=True, exist_ok=True)
+        restored_backup_dir().mkdir(parents=True, exist_ok=True)
+        paths = [
+            backup_dir() / "recovery-1.db",
+            restored_backup_dir() / "undo-2.db",
+            backup_dir() / "recovery-3.db",
+        ]
+        for index, path in enumerate(paths):
+            path.write_bytes(b"x" * 6)
+            os.utime(path, (100 + index, 100 + index))
+        old_cap = db_module.AUXILIARY_BACKUP_MAX_BYTES
+        db_module.AUXILIARY_BACKUP_MAX_BYTES = 10
+        try:
+            prune_auxiliary_backups()
+        finally:
+            db_module.AUXILIARY_BACKUP_MAX_BYTES = old_cap
+        self.assertEqual(auxiliary_backups(), [paths[-1]])
 
     def test_corrupt_backup_is_rejected_before_restore(self) -> None:
         with connect():

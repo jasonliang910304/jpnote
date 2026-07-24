@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.6.6.4
+
+- grammar manual edit 改為 relation logical diff/upsert；不再以 `source_key OR target_key` 整批刪除，保留未顯示的 pending relation、未修改 relation 的 `source` 與 `created_at`，刪除時也只移除指定 logical pair 與 reciprocal/inverse。
+- 新增 `jpnote_app.mutations.execute_safe_mutation()`；CLI import/edit/delete/attempt/repair/merge/romaji 與 `JpnoteCore` 寫入共用 backup、transaction、commit、export 邊界。
+- `JpnoteCore.apply_import()` 會在同一 transaction connection 上重建 plan、執行完整 preflight，blocking conflict 不可略過；疑似重複需明確 `accept_warnings=True`。
+- raw `sqlite3.connect()` helper 全部使用顯式 close；100 次 preflight 的 file descriptor 不再線性增加。
+- pending backup filename 加入 owner PID；下次 writable connect 會提升 dead-process orphan snapshot，保留 corrupt snapshot供人工檢查，並跳過仍存活 process 的 snapshot。
+- `jpnote undo --list`／`--backup` 支援指定較舊 backup；預設跳過損壞的最新 backup，且先驗證目標再建立 recovery snapshot。
+- recovery/restored history 新增獨立 50 MiB retention cap。
+- entry/source timestamp 改用 ISO-8601 microseconds，降低同秒新增／更新誤判。
+- `--item-key` 找不到或 `--attempt-index` 超出範圍時直接報錯，不再靜默顯示 no selection。
+- 新增 v0.6.6.4 regression tests；完整測試 165 passed、1 skipped、12 subtests，app-only coverage 72%。
+- SQLite schema 維持 v5；public import JSON schema 未新增欄位。
+
 ## 0.6.6.3
 
 - 正常 `jpnote paste`／`jpnote import FILE` 預設選取整批 payload，並在任何寫入前自動執行與 `--check --all` 相同的完整 read-only preflight。

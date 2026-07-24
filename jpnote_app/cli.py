@@ -32,19 +32,25 @@ from .preferences import (
 from .db import (
     active_backups,
     active_backup_bytes,
+    backup_integrity_ok,
     connect,
     connect_preflight,
     create_backup,
     create_recovery_snapshot,
     move_used_backup,
-    mutation_backup,
     restore_database_from,
 )
 from .export_markdown import export_all
 from .fs_utils import atomic_write_text, ensure_private_dir
 from .import_resolution import resolve_import_plan
 from .import_safe_fixes import apply_safe_import_fixes
-from .import_preflight import build_preflight_report, render_preflight_json, render_preflight_text
+from .import_preflight import (
+    blocking_preflight_messages,
+    build_preflight_report,
+    render_preflight_json,
+    render_preflight_text,
+)
+from .mutations import execute_safe_mutation
 from .romaji_maintenance import romaji_audit_records, safe_romaji_candidates, apply_safe_romaji_normalization
 from .repository import (
     find_exact_entry,
@@ -289,18 +295,6 @@ def _print_apply_preflight(report: dict[str, Any], args: argparse.Namespace, *, 
     output.flush()
 
 
-def _blocking_preflight_messages(report: dict[str, Any]) -> list[str]:
-    summary = report["summary"]
-    messages: list[str] = []
-    if summary.get("conflicting_attempts", 0):
-        messages.append(f"{summary['conflicting_attempts']} 筆作答 identity 衝突")
-    if summary.get("attempts_with_missing_links", 0):
-        messages.append(f"{summary['attempts_with_missing_links']} 筆作答缺少 linked_entries")
-    if summary.get("pending_relation_conflicts", 0):
-        messages.append(f"{summary['pending_relation_conflicts']} 筆 pending relation note 衝突")
-    return messages
-
-
 def _run_import_text(text: str, args: argparse.Namespace) -> int:
     if args.check and args.dry_run:
         raise ValueError("--check 與 --dry-run 請擇一使用。")
@@ -312,9 +306,25 @@ def _run_import_text(text: str, args: argparse.Namespace) -> int:
     # selectors still support advanced partial imports; --all remains as a
     # compatibility/documentation flag rather than a safety bypass.
     if args.item_key or args.attempt_index:
+        requested_item_keys = {_canonical_cli_key(key) for key in args.item_key}
+        available_item_keys = {item["key"] for item in plan.items}
+        missing_item_keys = sorted(requested_item_keys - available_item_keys)
+        invalid_attempt_indices = sorted({
+            index for index in args.attempt_index
+            if index < 0 or index >= len(plan.attempts)
+        })
+        if missing_item_keys or invalid_attempt_indices:
+            problems: list[str] = []
+            if missing_item_keys:
+                problems.append("找不到 item key：" + "、".join(missing_item_keys))
+            if invalid_attempt_indices:
+                problems.append(
+                    "attempt index 超出範圍：" + "、".join(str(index) for index in invalid_attempt_indices)
+                )
+            raise ValueError("；".join(problems))
         selected = filter_import_plan(
             plan,
-            set(args.item_key) if args.item_key else set(),
+            requested_item_keys if args.item_key else set(),
             set(args.attempt_index) if args.attempt_index else set(),
         )
     else:
@@ -407,7 +417,7 @@ def _run_import_text(text: str, args: argparse.Namespace) -> int:
                     print(f"已再套用 {len(fix_actions)} 組安全整理；尚未修改資料庫。")
                 _print_apply_preflight(report, args, heading="=== 最終安全整理後預檢 ===")
 
-    blocking = _blocking_preflight_messages(report)
+    blocking = blocking_preflight_messages(report)
     if blocking:
         raise RuntimeError(
             "預檢仍有不能以 yes 強行略過的問題：" + "；".join(blocking)
@@ -423,14 +433,13 @@ def _run_import_text(text: str, args: argparse.Namespace) -> int:
             print("已取消，未修改資料庫。", file=warning_stream)
             return 0
 
-    with mutation_backup("import") as backup:
-        with connect() as conn:
-            before_changes = conn.total_changes
-            result = apply_import(conn, selected)
-            modified = conn.total_changes > before_changes
-            backup.mark_changed(modified)
-            if modified:
-                export_all(conn)
+    execution = execute_safe_mutation(
+        "import",
+        lambda conn: apply_import(conn, selected),
+    )
+    result = execution.value
+    modified = execution.modified
+    backup = execution.backup
     if args.format == "json":
         _json({"result": result.to_dict(), "backup": str(backup) if backup else ""})
     else:
@@ -730,14 +739,13 @@ def command_edit(args: argparse.Namespace) -> int:
         validate_entry_edit_fields(raw)
         normalized = validate_item(raw)
         normalized["sources"] = normalize_sources(raw.get("sources"))
-        with mutation_backup("edit") as backup:
-            with connect() as conn:
-                before_changes = conn.total_changes
-                updated = replace_entry_data(conn, key, normalized)
-                modified = conn.total_changes > before_changes
-                backup.mark_changed(modified)
-                if modified:
-                    export_all(conn)
+        execution = execute_safe_mutation(
+            "edit",
+            lambda conn: replace_entry_data(conn, key, normalized),
+        )
+        updated = execution.value
+        modified = execution.modified
+        backup = execution.backup
         if modified:
             print(f"已更新：{updated.get('display', key)}")
         else:
@@ -762,15 +770,11 @@ def command_delete(args: argparse.Namespace) -> int:
         if answer != "yes":
             print("已取消。")
             return 0
-    with mutation_backup("delete") as backup:
-        with connect() as conn:
-            before_changes = conn.total_changes
-            with conn:
-                conn.execute("DELETE FROM entries WHERE key = ?", (key,))
-            modified = conn.total_changes > before_changes
-            backup.mark_changed(modified)
-            if modified:
-                export_all(conn)
+    execution = execute_safe_mutation(
+        "delete",
+        lambda conn: conn.execute("DELETE FROM entries WHERE key = ?", (key,)).rowcount > 0,
+    )
+    backup = execution.backup
     print(f"已刪除：{entry['display']}")
     if backup:
         print(f"自動備份：{backup}")
@@ -895,14 +899,13 @@ def command_attempts_edit(args: argparse.Namespace) -> int:
         validate_attempt_edit_fields(raw)
         raw["event_key"] = event_key
         validate_attempt(raw)
-        with mutation_backup("attempt-edit") as backup:
-            with connect() as conn:
-                before_changes = conn.total_changes
-                updated = replace_attempt_data(conn, event_key, raw)
-                modified = conn.total_changes > before_changes
-                backup.mark_changed(modified)
-                if modified:
-                    export_all(conn)
+        execution = execute_safe_mutation(
+            "attempt-edit",
+            lambda conn: replace_attempt_data(conn, event_key, raw),
+        )
+        updated = execution.value
+        modified = execution.modified
+        backup = execution.backup
         if modified:
             print(f"已更新作答紀錄：{updated['event_key']}")
         else:
@@ -950,15 +953,14 @@ def command_attempts_migrate_options(args: argparse.Namespace) -> int:
                     if item.get("prompt_preview"):
                         print(f"  題目：{item['prompt_preview']}")
         return 0
-    with mutation_backup("attempt-options-migration") as backup:
-        with connect() as conn:
-            before_changes = conn.total_changes
-            applied = apply_safe_option_migrations(conn)
-            unresolved = suspicious_option_migration_candidates(conn)
-            modified = conn.total_changes > before_changes
-            backup.mark_changed(modified)
-            if modified:
-                export_all(conn)
+    def migrate_options(conn: sqlite3.Connection) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        applied = apply_safe_option_migrations(conn)
+        unresolved = suspicious_option_migration_candidates(conn)
+        return applied, unresolved
+
+    execution = execute_safe_mutation("attempt-options-migration", migrate_options)
+    applied, unresolved = execution.value
+    backup = execution.backup
     if args.format == "json":
         _json({
             "migrated": len(applied),
@@ -1002,14 +1004,12 @@ def command_attempts_delete(args: argparse.Namespace) -> int:
         if answer != "yes":
             print("已取消。")
             return 0
-    with mutation_backup("attempt-delete") as backup:
-        with connect() as conn:
-            before_changes = conn.total_changes
-            deleted = delete_attempt_data(conn, event_key)
-            modified = conn.total_changes > before_changes
-            backup.mark_changed(modified)
-            if modified:
-                export_all(conn)
+    execution = execute_safe_mutation(
+        "attempt-delete",
+        lambda conn: delete_attempt_data(conn, event_key),
+    )
+    deleted = execution.value
+    backup = execution.backup
     if not deleted:
         print("找不到作答紀錄。", file=sys.stderr)
         return 1
@@ -1063,14 +1063,12 @@ def command_romaji_normalize(args: argparse.Namespace) -> int:
     if not candidates:
         print("沒有可安全正規化的羅馬拼音。") if args.format == "text" else _json({"normalized": 0, "items": [], "backup": ""})
         return 0
-    with mutation_backup("romaji-normalize") as backup:
-        with connect() as conn:
-            before_changes = conn.total_changes
-            applied = apply_safe_romaji_normalization(conn)
-            modified = conn.total_changes > before_changes
-            backup.mark_changed(modified)
-            if modified:
-                export_all(conn)
+    execution = execute_safe_mutation(
+        "romaji-normalize",
+        apply_safe_romaji_normalization,
+    )
+    applied = execution.value
+    backup = execution.backup
     if args.format == "json":
         _json({"normalized": len(applied), "items": applied, "backup": str(backup) if backup else ""})
     else:
@@ -1099,14 +1097,12 @@ def command_merge(args: argparse.Namespace) -> int:
         if answer != "yes":
             print("已取消。")
             return 0
-    with mutation_backup("merge") as backup:
-        with connect() as conn:
-            before_changes = conn.total_changes
-            entry = merge_entries(conn, args.source, args.target)
-            modified = conn.total_changes > before_changes
-            backup.mark_changed(modified)
-            if modified:
-                export_all(conn)
+    execution = execute_safe_mutation(
+        "merge",
+        lambda conn: merge_entries(conn, args.source, args.target),
+    )
+    entry = execution.value
+    backup = execution.backup
     _json(entry) if args.format == "json" else print(f"已合併到：{entry.get('display', args.target)}")
     if backup and args.format != "json":
         print(f"自動備份：{backup}")
@@ -1143,20 +1139,21 @@ def command_repair(args: argparse.Namespace) -> int:
         if answer != "yes":
             print("已取消。")
             return 0
-    with mutation_backup("repair") as backup:
-        with connect() as conn:
-            before_changes = conn.total_changes
-            actions = apply_safe_repairs(conn)
-            option_actions = apply_safe_option_migrations(conn)
-            romaji_actions = apply_safe_romaji_normalization(conn)
-            unresolved = [
-                issue.to_dict() for issue in run_audit(conn)
-                if issue.severity in {"critical", "needs_input", "review"} and not issue.fixable
-            ]
-            modified = conn.total_changes > before_changes
-            backup.mark_changed(modified)
-            if modified:
-                export_all(conn)
+    def repair_operation(conn: sqlite3.Connection) -> tuple[
+        list[str], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]
+    ]:
+        actions = apply_safe_repairs(conn)
+        option_actions = apply_safe_option_migrations(conn)
+        romaji_actions = apply_safe_romaji_normalization(conn)
+        unresolved = [
+            issue.to_dict() for issue in run_audit(conn)
+            if issue.severity in {"critical", "needs_input", "review"} and not issue.fixable
+        ]
+        return actions, option_actions, romaji_actions, unresolved
+
+    execution = execute_safe_mutation("repair", repair_operation)
+    actions, option_actions, romaji_actions, unresolved = execution.value
+    backup = execution.backup
     if args.format == "json":
         _json({
             "actions": actions,
@@ -1237,17 +1234,46 @@ def command_backups(_: argparse.Namespace) -> int:
     total_mib = active_backup_bytes() / (1024 * 1024)
     cap_mib = BACKUP_MAX_BYTES / (1024 * 1024)
     print(f"可供 undo 的備份（總容量 {total_mib:.1f} / {cap_mib:.0f} MiB）：")
-    for path in backups:
-        print(f"- {path.name}  ({path.stat().st_size / (1024 * 1024):.1f} MiB)")
+    for index, path in enumerate(backups, 1):
+        status = "正常" if backup_integrity_ok(path) else "損壞"
+        print(f"{index}. [{status}] {path.name}  ({path.stat().st_size / (1024 * 1024):.1f} MiB)")
     return 0
 
 
-def command_undo(_: argparse.Namespace) -> int:
-    backups = active_backups()
+def _select_undo_backup(selector: str | None) -> tuple[Path | None, list[Path]]:
+    newest_first = list(reversed(active_backups()))
+    if not newest_first:
+        return None, []
+    if selector:
+        if selector.isdigit():
+            index = int(selector)
+            if index < 1 or index > len(newest_first):
+                raise ValueError(f"backup 編號超出範圍：{selector}")
+            return newest_first[index - 1], newest_first
+        matched = next((path for path in newest_first if path.name == Path(selector).name), None)
+        if matched is None:
+            raise ValueError(f"找不到指定 backup：{selector}")
+        return matched, newest_first
+    return next((path for path in newest_first if backup_integrity_ok(path)), None), newest_first
+
+
+def command_undo(args: argparse.Namespace) -> int:
+    if args.list:
+        return command_backups(args)
+    target, backups = _select_undo_backup(args.backup)
     if not backups:
         print("沒有可復原的備份。")
         return 1
-    target = backups[-1]
+    if target is None:
+        print("所有可用 backup 都未通過完整性檢查。", file=sys.stderr)
+        return 1
+    if not backup_integrity_ok(target):
+        raise ValueError(f"指定 backup 已損壞，拒絕復原：{target.name}")
+    if args.backup is None and target != backups[0]:
+        print(f"最新 backup 已損壞；改用較舊的有效 backup：{target.name}", file=sys.stderr)
+
+    # Validate the target before creating a recovery snapshot, so a corrupt
+    # selection never creates extra recovery files or changes current state.
     recovery = create_recovery_snapshot("before-undo")
     restore_database_from(target)
     used = move_used_backup(target)
@@ -1530,7 +1556,9 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("backups", help="列出 undo 備份")
     p.set_defaults(func=command_backups)
 
-    p = sub.add_parser("undo", help="復原最近一次修改")
+    p = sub.add_parser("undo", help="復原最近一次修改，或指定較舊 backup")
+    p.add_argument("--list", action="store_true", help="列出可選 backup，不執行復原")
+    p.add_argument("--backup", help="指定 backups 列表中的 1 起算編號或完整檔名")
     p.set_defaults(func=command_undo)
 
     p = sub.add_parser("architecture", help="檢查核心與 fzf 耦合")

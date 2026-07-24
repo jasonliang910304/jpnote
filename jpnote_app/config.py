@@ -10,9 +10,10 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-VERSION = "0.6.6.3"
+VERSION = "0.6.6.4"
 SCHEMA_VERSION = 5
 BACKUP_MAX_BYTES = 50 * 1024 * 1024
+AUXILIARY_BACKUP_MAX_BYTES = 50 * 1024 * 1024
 
 
 def data_dir() -> Path:

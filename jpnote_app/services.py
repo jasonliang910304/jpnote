@@ -26,7 +26,7 @@ from .repository import (
     upsert_entry,
 )
 from .import_outcomes import classify_attempt_outcome
-from .relation_integrity import reciprocal_type, upsert_relation
+from .relation_integrity import delete_logical_relation, reciprocal_type, upsert_relation
 from .validation import normalize_identity_text, normalize_payload
 
 
@@ -537,10 +537,12 @@ def merge_entries(conn: sqlite3.Connection, source_key: str, target_key: str) ->
     return get_entry(conn, target_key) or {}
 
 def replace_entry_data(conn: sqlite3.Connection, original_key: str, item: dict[str, Any]) -> dict[str, Any]:
-    """Replace one entry's editable fields and outgoing grammar relationships.
+    """Replace one entry's editable fields and outgoing resolved relations.
 
-    A byte-for-byte-equivalent manual edit is a true no-op.  Relationship-only
-    edits still count as content changes and update the entry timestamp once.
+    Relation editing is a logical diff.  It must never delete every row that
+    merely touches the edited entry: doing so loses unrelated incoming and
+    unresolved pending relations.  Unchanged relation rows retain their
+    original ``source`` and ``created_at`` metadata.
     """
     from .repository import replace_entry
 
@@ -559,31 +561,43 @@ def replace_entry_data(conn: sqlite3.Connection, original_key: str, item: dict[s
             if isinstance(value, dict)
         )
 
-    relations_changed = False
-    if item["type"] == "grammar":
-        relations_changed = relation_signature(current.get("related_grammar", [])) != relation_signature(
-            item.get("related_grammar", [])
-        )
+    current_relations = current.get("related_grammar", []) if item["type"] == "grammar" else []
+    desired_relations = item.get("related_grammar", []) if item["type"] == "grammar" else []
+    relations_changed = relation_signature(current_relations) != relation_signature(desired_relations)
+
+    current_identities = {
+        (str(relation.get("key") or ""), str(relation.get("relation") or ""))
+        for relation in current_relations
+        if isinstance(relation, dict)
+    }
+    desired_by_identity = {
+        (str(relation["key"]), str(relation["relation"])): relation
+        for relation in desired_relations
+    }
 
     with conn:
         entry_changed = replace_entry(conn, original_key, item)
         if item["type"] == "grammar" and relations_changed:
-            conn.execute(
-                "DELETE FROM grammar_relations WHERE source_key = ? OR target_key = ?",
-                (original_key, original_key),
-            )
-            conn.execute(
-                "DELETE FROM pending_grammar_relations WHERE source_key = ? OR target_key = ?",
-                (original_key, original_key),
-            )
-            for relation in item.get("related_grammar", []):
-                add_or_queue_relation(
+            # Remove only public relations explicitly removed from this entry.
+            # Pending relations are not currently shown by the editor and are
+            # therefore intentionally preserved unless a dedicated pending
+            # relation operation is introduced later.
+            for target_key, relation_type in sorted(current_identities - set(desired_by_identity)):
+                delete_logical_relation(conn, original_key, target_key, relation_type)
+
+            # Upsert the desired outgoing set. Exact rows are true no-ops;
+            # changed rows keep their own historical provenance metadata.
+            for relation in desired_by_identity.values():
+                upsert_relation(
                     conn,
                     original_key,
-                    relation,
-                    item.get("source", "") or "manual edit",
+                    relation["key"],
+                    relation["relation"],
+                    relation["note"],
+                    "manual edit",
+                    preserve_existing_source=True,
                 )
-            resolve_pending_relations(conn)
+
             if not entry_changed:
                 conn.execute(
                     "UPDATE entries SET updated_at = ? WHERE key = ?",
