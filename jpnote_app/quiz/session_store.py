@@ -479,30 +479,33 @@ class QuizSessionStore:
                     now,
                 ),
             )
-            for position, (question, event_id) in enumerate(
-                zip(frozen_questions, event_ids, strict=True), start=1
-            ):
-                conn.execute(
-                    """
-                    INSERT INTO quiz_question_events (
-                        question_event_id, session_id, position, question_type,
-                        generator_version, source_kind, source_key, prompt,
-                        choices_json, correct_answer_json
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        event_id,
-                        stable_session_id,
-                        position,
-                        question.question_type,
-                        question.generator_version,
-                        question.source_kind,
-                        question.source_key,
-                        question.prompt,
-                        _choices_to_json(question.choices),
-                        _answer_to_json(question.correct_answer),
-                    ),
+            question_rows = [
+                (
+                    event_id,
+                    stable_session_id,
+                    position,
+                    question.question_type,
+                    question.generator_version,
+                    question.source_kind,
+                    question.source_key,
+                    question.prompt,
+                    _choices_to_json(question.choices),
+                    _answer_to_json(question.correct_answer),
                 )
+                for position, (question, event_id) in enumerate(
+                    zip(frozen_questions, event_ids, strict=True), start=1
+                )
+            ]
+            conn.executemany(
+                """
+                INSERT INTO quiz_question_events (
+                    question_event_id, session_id, position, question_type,
+                    generator_version, source_kind, source_key, prompt,
+                    choices_json, correct_answer_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                question_rows,
+            )
             conn.commit()
         except sqlite3.IntegrityError as exc:
             conn.rollback()

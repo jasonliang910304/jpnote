@@ -3,7 +3,7 @@
 最後更新：2026-07-25（Asia/Taipei）
 正式 release 基準：`jpnote v0.7.0`
 正式安裝版本：`jpnote 0.7.0`
-目前開發 checkpoint：post-v0.7.0 `paste --stdin` hotfix 完成（功能 commit `74fb82a`）
+目前開發 checkpoint：post-v0.7.0 installed fzf helper 修正與 Quiz 啟動回應改善完成
 
 用途：讓新的 ChatGPT 對話或新的開發工作階段，不依賴舊聊天內容也能直接接續工作。
 
@@ -19,6 +19,7 @@
 - public import JSON schema：v0.7.0 相容，Quiz 未新增欄位
 - v0.7.0 release gate：通過
 - post-release 功能 commit：`a660950`（是非題回饋標籤釐清）、`74fb82a`（`jpnote paste --stdin`）
+- 最新 maintenance checkpoint：installed fzf helper 以 isolated bootstrap 啟動；Quiz 開始前立即顯示準備畫面，session 題目寫入改用 batch insert。
 
 ### Quiz v1／v0.7.0 release scope
 
@@ -60,6 +61,14 @@ Quiz history 不寫入既有教材 `attempts`。
 - 新增 `tests/test_paste_stdin.py`；針對性測試共 `13 passed`。
 - installed-command smoke 已以 temporary `JPNOTE_DATA_DIR` 驗證 `--help`、read-only `--check --format json`、`--yes` 正式匯入與 `stats`。
 - 實際網路 SSH 尚待出差前由 Windows 筆電做一次端到端 smoke；本機 pipe／installed launcher 路徑已通過。
+
+### post-v0.7.0 搜尋／Quiz 回應 maintenance
+- 修正 installed launcher 下 fzf reload/filter helper 以新的 Python 子程序啟動時找不到 `jpnote_app` 的 regression。
+- helper 子程序現在比照主 launcher 使用 `python -I`、明確 installed app root 與 `runpy.run_module()`；不依賴 cwd 或 `PYTHONPATH`。
+- 搜尋 reload 與 Ctrl-F filter panel 共用同一個 isolated helper bootstrap。
+- Quiz 從設定或 shortage 確認開始 session 前，curses 會先 refresh「正在準備題目……」，避免同步建題期間看似凍結。
+- Quiz session 的 question-event 初始寫入由逐筆 `execute()` 改為同一 transaction 內 `executemany()`，不改 schema 或 history snapshot 語意。
+- 新增 path-isolation 與 loading-refresh regression tests；本 checkpoint 不接觸 core DB schema／public JSON schema。
 
 ---
 
@@ -173,6 +182,7 @@ jpnote browse
 
 完整順序以第 3 節為準；摘要如下：
 
+- 已完成 maintenance：installed fzf helper path isolation、Quiz 開始前準備畫面與 batch session insert。
 - 高優先：是非題 `○／×`、重組完整句子／高亮、history export/delete、TUI polish、release/install 自動化。
 - 一般優先：單字漢字洩題與同音詞唯一答案、fuzzy candidate、AI context、grammar combinations、romaji／語源、fzf／未分類／mistake level、多 writer／identity index。
 - 低優先：負分制、response timing、streak、familiarity、spaced repetition、radar chart／長期趨勢。

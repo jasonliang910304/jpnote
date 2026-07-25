@@ -25,6 +25,7 @@
 - 隔離安裝、release-readiness、正式 DB 副本、前版升級、真實安裝與 TUI smoke：PASS
 - post-release commits：`a660950`（是非題回饋標籤）、`74fb82a`（`paste --stdin`）
 - `paste --stdin` targeted regression：`13 passed`；temporary-data installed smoke：PASS
+- post-release maintenance：installed fzf helper isolated bootstrap、Quiz 準備畫面 refresh、session question batch insert
 
 啟動新工作階段先確認基線：
 
@@ -67,6 +68,14 @@ jpnote --version
 - 沒有 core/Quiz schema 或 public import JSON schema 變更。
 - 正式 stdin 匯入因 stdin 已用來承載 JSON，非互動使用需加 `--yes`；預檢可用 `--check`。
 - `--file PATH` 未加入；檔案輸入繼續使用 `jpnote import FILE`。
+
+
+## 已完成搜尋／Quiz 啟動 maintenance
+
+- installed 版 fzf search reload／filter helper 不再使用裸 `python -m jpnote_app...`。
+- helper 比照主 launcher 使用 `python -I`、明確 app root 與 `runpy.run_module()`，避免 cwd／`PYTHONPATH` shadow。
+- Quiz 開始 session 前先 refresh「正在準備題目……」，同步建題期間不再只有靜止設定畫面。
+- Quiz session 初始題目列改用同一 transaction 內 batch insert；無 schema 變更。
 
 ## 下一個正確工作項目
 

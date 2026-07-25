@@ -3,7 +3,7 @@
 最後更新：2026-07-25（Asia/Taipei）
 正式 release 基準：v0.7.0
 正式安裝版本：0.7.0
-目前開發位置：v0.7.0 release 完成；post-release `paste --stdin` hotfix 已完成，進入使用回饋驅動維護
+目前開發位置：v0.7.0 release 完成；`paste --stdin`、installed fzf helper 與 Quiz 啟動回應 maintenance 已完成
 
 ## 已通過的前置 gate
 
@@ -100,6 +100,14 @@
 - `tests/test_paste_stdin.py` 與既有相關測試共 `13 passed`。
 - installed launcher 以 temporary `JPNOTE_DATA_DIR` 完成 read-only preflight 與正式匯入 smoke。
 - `--file PATH` 暫不加入；現有 `jpnote import FILE` 已涵蓋檔案輸入。
+
+### post-v0.7.0 搜尋／Quiz 啟動 maintenance — 完成
+
+- fzf search reload 與 filter panel helper 改用 isolated Python bootstrap，installed 版不再依賴 cwd／`PYTHONPATH` 找到 `jpnote_app`。
+- 新 bootstrap 維持 launcher path isolation，阻擋同名 shadow package。
+- Quiz 按下開始或接受 shortage 後，先 refresh「正在準備題目……」再同步建立 session。
+- Quiz 初始 question-event persistence 改用 `executemany()` batch insert；schema、snapshot 與 transaction 邊界不變。
+- 新增 helper path-isolation 與 TUI loading-refresh regression tests。
 
 ### 下一個 checkpoint：使用回饋與 TUI polish
 

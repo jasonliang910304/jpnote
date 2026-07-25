@@ -96,6 +96,25 @@ def _configure_default_background(*, transparent_background: bool) -> None:
         pass
 
 
+def _starts_slow_session_action(controller: QuizTuiController, key: str) -> bool:
+    state = controller.state
+    if state.screen == "setup":
+        return key in {"ENTER", "SPACE"} and state.setup_focus >= 2
+    if state.screen == "shortage":
+        return key in {"ENTER", "SPACE", "y"}
+    return False
+
+
+def _preparing_screen() -> RenderedScreen:
+    return RenderedScreen(
+        lines=(
+            "正在準備題目……",
+            "",
+            "正在讀取題庫、生成安全選項並建立測驗紀錄。",
+        )
+    )
+
+
 def _run_curses(
     stdscr: curses.window,
     controller: QuizTuiController,
@@ -127,6 +146,8 @@ def _run_curses(
                 continue
             key = _normalize_key(value)
             if key:
+                if _starts_slow_session_action(controller, key):
+                    _draw(stdscr, _preparing_screen())
                 controller.handle_key(key)
     except BaseException:
         controller.interrupt_active_session()

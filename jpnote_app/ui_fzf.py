@@ -49,6 +49,29 @@ def _line(token: str, visible: str, metadata: str = "") -> str:
     return f"{_machine_token(token)}\t{_one_line(visible)}\t{_one_line(metadata)}"
 
 
+def _isolated_module_command(module: str) -> str:
+    """Return a shell command that imports an installed jpnote helper safely.
+
+    The main launcher uses ``python -I`` and inserts the installed application
+    directory explicitly.  fzf helpers run in fresh Python processes, so they
+    must repeat that bootstrap instead of relying on cwd or ``PYTHONPATH``.
+    """
+    app_root = str(Path(__file__).resolve().parent.parent)
+    bootstrap = (
+        "import runpy,sys;"
+        f"sys.path.insert(0, {app_root!r});"
+        f"runpy.run_module({module!r}, run_name='__main__')"
+    )
+    return " ".join(
+        (
+            shlex.quote(sys.executable),
+            "-I",
+            "-c",
+            shlex.quote(bootstrap),
+        )
+    )
+
+
 def _execute(
     lines: list[str],
     prompt: str,
@@ -80,10 +103,9 @@ def _execute(
 
         dataset_path = root / "records.tsv"
         dataset_path.write_text("\n".join(rendered) + ("\n" if rendered else ""), encoding="utf-8")
-        python = shlex.quote(sys.executable)
-        module = "jpnote_app.fzf_search_helper"
+        helper = _isolated_module_command("jpnote_app.fzf_search_helper")
         dataset_arg = shlex.quote(str(dataset_path))
-        reload_command = f"{python} -m {module} {dataset_arg} {{q}}"
+        reload_command = f"{helper} {dataset_arg} {{q}}"
 
         command = [
             "fzf",
@@ -411,24 +433,23 @@ def select_browse_filters(
         write_state(defaults_path, _copy_filter_state(defaults))
         render_panel(panel_path, _copy_filter_state(filters))
 
-        python = shlex.quote(sys.executable)
-        module = "jpnote_app.fzf_filter_helper"
+        helper = _isolated_module_command("jpnote_app.fzf_filter_helper")
         state_arg = shlex.quote(str(state_path))
         panel_arg = shlex.quote(str(panel_path))
         defaults_arg = shlex.quote(str(defaults_path))
         toggle_command = (
-            f"{python} -m {module} toggle {state_arg} {panel_arg} "
+            f"{helper} toggle {state_arg} {panel_arg} "
             f"{defaults_arg} {{1}}"
         )
         reset_command = (
-            f"{python} -m {module} reset {state_arg} {panel_arg} "
+            f"{helper} reset {state_arg} {panel_arg} "
             f"{defaults_arg}"
         )
         reload_command = f"cat -- {panel_arg}"
         shortcut_binds: list[str] = []
         for digit in SHORTCUT_TOKENS:
             shortcut_command = (
-                f"{python} -m {module} shortcut {state_arg} {panel_arg} "
+                f"{helper} shortcut {state_arg} {panel_arg} "
                 f"{defaults_arg} {digit}"
             )
             shortcut_binds.append(
