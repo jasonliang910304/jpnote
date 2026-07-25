@@ -1,9 +1,9 @@
 # jpnote 專案交接紀錄
 
-最後更新：2026-07-24（Asia/Taipei）
+最後更新：2026-07-25（Asia/Taipei）
 正式 release 基準：`jpnote v0.7.0`
 正式安裝版本：`jpnote 0.7.0`
-目前開發 checkpoint：v0.7.0 release gate 完成
+目前開發 checkpoint：post-v0.7.0 `paste --stdin` hotfix 完成（功能 commit `74fb82a`）
 
 用途：讓新的 ChatGPT 對話或新的開發工作階段，不依賴舊聊天內容也能直接接續工作。
 
@@ -18,6 +18,7 @@
 - core SQLite schema：`5`
 - public import JSON schema：v0.7.0 相容，Quiz 未新增欄位
 - v0.7.0 release gate：通過
+- post-release 功能 commit：`a660950`（是非題回饋標籤釐清）、`74fb82a`（`jpnote paste --stdin`）
 
 ### Quiz v1／v0.7.0 release scope
 
@@ -49,6 +50,16 @@ quiz data:  ${JPNOTE_QUIZ_DB:-~/.local/share/jpnote/quiz.db}      schema v2
 ```
 
 Quiz history 不寫入既有教材 `attempts`。
+
+### post-v0.7.0 匯入 hotfix
+
+- `jpnote paste` 維持從 Wayland 剪貼簿讀取。
+- `jpnote paste --stdin` 可從標準輸入讀取完整 JSON，適合 SSH／pipe。
+- 剪貼簿與 stdin 只在輸入取得層分流；兩者之後都進入既有 `_run_import_text()`，共用解析、schema 驗證、重複偵測、完整預檢、確認、安全整理、備份與正式匯入流程。
+- 沒有修改 core/Quiz schema，也沒有修改 public import JSON schema。
+- 新增 `tests/test_paste_stdin.py`；針對性測試共 `13 passed`。
+- installed-command smoke 已以 temporary `JPNOTE_DATA_DIR` 驗證 `--help`、read-only `--check --format json`、`--yes` 正式匯入與 `stats`。
+- 實際網路 SSH 尚待出差前由 Windows 筆電做一次端到端 smoke；本機 pipe／installed launcher 路徑已通過。
 
 ---
 
@@ -99,16 +110,31 @@ Quiz history 不寫入既有教材 `attempts`。
 
 ## 3. 下一個正確工作項目
 
-### v0.7.0 後續
+### 近期高優先／使用回饋
 
-v0.7.0 已完成正式 DB 副本、前一版升級、正式安裝、launcher isolation 與 TUI smoke。日常 `jpnote paste/import` 已恢復。
+1. Quiz 是非題 presentation 改為 `○／×`；底層 `true／false` ID 維持不變，並同步即時回饋與 history。
+2. `reorder_4` 回饋顯示包含固定題幹的完整句子；可重組片段使用 ANSI 高亮，並提供 `NO_COLOR` fallback。
+3. TUI history export/delete 入口、刪除確認、刷新與空狀態（headless store/API 已完成）。
+4. TUI 錯誤訊息與空狀態 polish。
+5. 評估 `jpnote paste --file PATH` 是否值得作為 `jpnote import FILE` 的便利 alias；若擴大介面則維持既有 `import FILE`。
+6. release artifact 自動化：source tar.gz、release patch、SHA-256、GitHub Release assets。
+7. install/release script 整合。
 
-下一個非阻塞 checkpoint 可依需求選擇：
+### 一般優先
 
-1. TUI history export/delete 入口（headless store/API 已完成）。
-2. optional negative scoring／guess penalty 的規格與設定。
-3. response timing、streak、熟悉度與 spaced repetition 的長期設計。
-4. 多 writer busy timeout/retry/serialization 與 attempt identity index optimization。
+8. 單字意思題降低漢字洩題；改用假名 prompt 時必須排除所有同讀音詞條的意思，確保選項只有一個可能正解。無法保證唯一答案時 fallback 顯示漢字、改題型或跳過。
+9. fuzzy duplicate candidate／確認流程改善。
+10. AI context 精簡匯出流程。
+11. `grammar_combinations` 等結構化搭配資訊。
+12. romaji 分隔與外來語語源欄位改善。
+13. fzf 多選、未分類顯示與 mistake level 空值處理。
+14. multi-writer busy timeout/retry/serialization 與 attempt identity index optimization。
+
+### 低優先／不阻塞正常 Quiz
+
+15. optional negative scoring／guess penalty。
+16. response timing、streak、familiarity、spaced repetition。
+17. radar chart／長期趨勢。
 
 除非出現 blocking regression，不要重新啟動同規模 release audit；以針對性測試與一般維護為主。
 
@@ -120,6 +146,7 @@ v0.7.0 已完成正式 DB 副本、前一版升級、正式安裝、launcher iso
 
 ```bash
 jpnote paste
+jpnote paste --stdin --check
 jpnote import FILE
 jpnote browse
 ```
@@ -144,16 +171,12 @@ jpnote browse
 
 ## 5. 已知 backlog
 
-### v0.7.0 後續
+完整順序以第 3 節為準；摘要如下：
 
-- TUI history export/delete 入口（headless export/delete 已完成）。
-
-### 低優先
-
-- 可選負分／猜題扣分。
-- response timing、streak、熟悉度、spaced repetition。
-- radar chart／長期趨勢。
-- 多 writer busy timeout/retry/serialization。
+- 高優先：是非題 `○／×`、重組完整句子／高亮、history export/delete、TUI polish、release/install 自動化。
+- 一般優先：單字漢字洩題與同音詞唯一答案、fuzzy candidate、AI context、grammar combinations、romaji／語源、fzf／未分類／mistake level、多 writer／identity index。
+- 低優先：負分制、response timing、streak、familiarity、spaced repetition、radar chart／長期趨勢。
+- `paste --file PATH` 非必要；現有 `jpnote import FILE` 已提供檔案輸入，只有在能保持介面簡潔時才增加 alias。
 
 ---
 
@@ -161,7 +184,7 @@ jpnote browse
 
 每個會改變「目前完成範圍、下一步、schema、測試基線或重要規格」的開發 checkpoint，至少同步更新：
 
-1. 對應 `docs/audits/quiz-*-development.md`
+1. 對應 `docs/audits/*-development.md` 或 checkpoint audit
 2. `docs/PROJECT_HANDOFF.md`
 3. `docs/ROADMAP.md`
 4. `docs/CHATGPT_CONTINUATION_PROMPT.md`

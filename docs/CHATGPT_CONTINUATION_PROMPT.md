@@ -23,18 +23,21 @@
 - 最新完整測試：`378 passed, 18 subtests passed`
 - app-only coverage：`76%`
 - 隔離安裝、release-readiness、正式 DB 副本、前版升級、真實安裝與 TUI smoke：PASS
+- post-release commits：`a660950`（是非題回饋標籤）、`74fb82a`（`paste --stdin`）
+- `paste --stdin` targeted regression：`13 passed`；temporary-data installed smoke：PASS
 
-啟動新工作階段先執行：
+啟動新工作階段先確認基線：
 
 ```bash
 git status
-git log --oneline --decorate -10
-git tag --sort=-creatordate | head -n 15
+git fetch --tags origin
+git rev-parse --short HEAD
+git rev-parse --short origin/main
+git rev-parse --short 'v0.7.0^{}'
 jpnote --version
-python -m compileall -q jpnote_app tests
-bash -n install.sh
-pytest -q
 ```
+
+不要無條件重跑已通過的 v0.7.0 完整 release gate；依當次修改執行針對性測試，只有 blocking regression 或正式 release 才擴大驗證。
 
 ## 已完成 Quiz 功能
 
@@ -56,20 +59,34 @@ pytest -q
 - installed launcher 已改為 `python3 -I` isolated bootstrap；repository/current-directory 與 `PYTHONPATH` shadow regression 通過。
 - 正式 DB snapshot、read-only Quiz planning、v0.6.6.4 → v0.7.0 upgrade、正式安裝與 TUI 啟動 smoke 全部通過。
 
+## 已完成 post-release hotfix
+
+- `jpnote paste` 保留 Wayland 剪貼簿輸入。
+- `jpnote paste --stdin` 可從 pipe／SSH 標準輸入讀取完整 JSON。
+- stdin 與 clipboard 共用既有 `_run_import_text()`，沒有另做解析、預檢或匯入邏輯。
+- 沒有 core/Quiz schema 或 public import JSON schema 變更。
+- 正式 stdin 匯入因 stdin 已用來承載 JSON，非互動使用需加 `--yes`；預檢可用 `--check`。
+- `--file PATH` 未加入；檔案輸入繼續使用 `jpnote import FILE`。
+
 ## 下一個正確工作項目
 
-v0.7.0 已完成 release gate。後續工作不阻塞正常使用與匯入：
+目前完整排程：
 
-1. TUI history export/delete 入口。
-2. optional negative scoring／guess penalty。
-3. response timing、streak、familiarity、spaced repetition。
-4. multi-writer retry/serialization 與 attempt identity index optimization。
+1. 是非題顯示改為 `○／×`，同步 question/feedback/history。
+2. `reorder_4` 顯示完整句子並高亮重組片段，提供無色 fallback。
+3. TUI history export/delete 入口與刪除確認。
+4. TUI 錯誤訊息／空狀態 polish。
+5. release artifact 自動化與 install/release script 整合。
+6. 單字漢字洩題改善；假名 prompt 必須排除所有同讀音詞條的意思，確保唯一答案。
+7. fuzzy candidates、AI context、grammar combinations、romaji／語源、fzf／未分類／mistake level。
+8. multi-writer／identity index。
+9. 低優先：負分制、timing、streak、familiarity、spaced repetition、radar／trends。
 
 不要因非 blocking finding 重啟同規模廣域健檢；優先依實際使用回饋做針對性修正。
 
 ## 日常資料匯入
 
-使用者會持續匯入文法與單字。預設不需停止 `jpnote paste/import`。只有當回覆明確標示「先暫停匯入」時才停止，通常是正式 core DB migration/repair/restore、固定 DB 快照、正式 install/upgrade smoke 或可能同時寫入 core DB 的測試。純 repository、Quiz 或 temporary DB 測試可並行。
+使用者會持續匯入文法與單字。預設不需停止 `jpnote paste`、`jpnote paste --stdin` 或 `jpnote import FILE`。只有當回覆明確標示「先暫停匯入」時才停止，通常是正式 core DB migration/repair/restore、固定 DB 快照、正式 install/upgrade smoke 或可能同時寫入 core DB 的測試。純 repository、Quiz 或 temporary DB 測試可並行。
 
 ## 硬性原則
 

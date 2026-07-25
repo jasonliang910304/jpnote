@@ -13,7 +13,7 @@
 - Python 3
 - SQLite（Python 標準函式庫內建支援即可）
 - fzf：選配；提供互動 browse／選擇器。沒有 fzf 仍可使用非互動 CLI。
-- Wayland `wl-paste` / `wl-copy`：只有 `jpnote paste` 與 `--copy-report` 需要。
+- Wayland `wl-paste` / `wl-copy`：只有預設剪貼簿模式的 `jpnote paste` 與 `--copy-report` 需要；`jpnote paste --stdin` 不需要。
 - `$EDITOR`：編輯命令使用；未設定時預設 `nvim`。
 
 ## 1.2 安裝 release 壓縮包
@@ -86,6 +86,9 @@ jpnote init
 # 2. 從剪貼簿匯入；程式會自動完整預檢、詢問安全整理，再詢問是否正式匯入
 jpnote paste
 
+# SSH／pipe 情境可從標準輸入預檢
+cat import.json | jpnote paste --stdin --check
+
 # 4. 日常瀏覽
 jpnote browse
 
@@ -111,13 +114,39 @@ jpnote repair --yes
 jpnote import FILE
 ```
 
-## 3.2 從 Wayland 剪貼簿匯入
+## 3.2 從 Wayland 剪貼簿或標準輸入匯入
+
+預設仍從 Wayland 剪貼簿讀取：
 
 ```bash
 jpnote paste
 ```
 
-需要 `wl-paste`。v0.6.6.3 起，正常 `import`／`paste` 預設處理整批 payload；`--all` 仍可寫出來作為明確標示與舊腳本相容，但不再是必要參數。
+需要 `wl-paste`。SSH、遠端 shell 或 pipe 情境可改從標準輸入讀取完整 JSON：
+
+```bash
+cat import.json | jpnote paste --stdin --check
+cat import.json | jpnote paste --stdin --yes
+```
+
+也可從另一台電腦直接把本機檔案送入遠端 jpnote：
+
+```bash
+ssh user@arch-desktop '~/.local/bin/jpnote paste --stdin --check --format json' < import.json
+ssh user@arch-desktop '~/.local/bin/jpnote paste --stdin --yes' < import.json
+```
+
+`--stdin` 不需要 `wl-paste`。它只改變文字輸入來源，之後仍和剪貼簿模式進入完全相同的 JSON 解析、schema 驗證、重複偵測、完整預檢、安全整理、確認、備份與正式匯入流程。
+
+因為標準輸入已用來承載 JSON，正式 pipe／SSH 匯入應加 `--yes`；否則程式在讀完 JSON 後沒有剩餘 stdin 可回答確認提示。先用 `--check` 檢查，再用相同檔案搭配 `--yes` 正式匯入。
+
+檔案輸入不需要 `paste --file`；既有指令已提供相同 importer 流程：
+
+```bash
+jpnote import FILE
+```
+
+v0.6.6.3 起，正常 `import`／`paste` 預設處理整批 payload；`--all` 仍可寫出來作為明確標示與舊腳本相容，但不再是必要參數。
 
 每次正式匯入都會先執行完整、read-only preflight，接著依序詢問：
 
@@ -133,6 +162,7 @@ jpnote paste
 ```bash
 jpnote import FILE --yes
 jpnote paste --yes
+cat import.json | jpnote paste --stdin --yes
 ```
 
 `--yes` 只略過上述確認並同意安全整理，**不會跳過 validation 或 preflight**。attempt identity conflict、缺少 linked entries、pending relation note conflict 等 blocking 問題，即使加 `--yes` 仍會拒絕匯入。疑似不同 stable key 的 duplicate warning 仍需 `--map-key`、`--skip-item` 或明確 `--accept-warnings`。
@@ -141,6 +171,7 @@ jpnote paste --yes
 
 ```bash
 jpnote paste --check --all
+cat import.json | jpnote paste --stdin --check --all
 jpnote import FILE --check --all
 ```
 
@@ -187,6 +218,7 @@ jpnote paste --check --all --format json --output report.json
 
 ```bash
 jpnote paste --check --all
+cat import.json | jpnote paste --stdin --check --all
 jpnote import FILE --check --all
 ```
 

@@ -1,9 +1,9 @@
 # jpnote 開發路線圖
 
-最後更新：2026-07-24（Asia/Taipei）
+最後更新：2026-07-25（Asia/Taipei）
 正式 release 基準：v0.7.0
 正式安裝版本：0.7.0
-目前開發位置：Quiz Phase 5／v0.7.0 release 完成；進入非阻塞後續維護
+目前開發位置：v0.7.0 release 完成；post-release `paste --stdin` hotfix 已完成，進入使用回饋驅動維護
 
 ## 已通過的前置 gate
 
@@ -13,6 +13,7 @@
 - 最新完整 regression：`378 passed, 18 subtests passed`。
 - app-only coverage：`76%`。
 - 隔離安裝 smoke 與 release-readiness audit：通過。
+- post-release `jpnote paste --stdin`：功能 commit `74fb82a`；針對性測試 `13 passed`，temporary-data installed smoke 通過。
 
 ## Phase 1：Quiz 契約與隔離骨架 — 完成
 
@@ -91,29 +92,42 @@
 - launcher current-directory／`PYTHONPATH` shadow 已修正並有 regression tests。
 - 正式資料：261 項、audit 0、pending relations 0；安裝後 quick/foreign-key checks 通過。
 
-### 下一個 checkpoint：post-v0.7.0 非阻塞維護
+### post-v0.7.0 匯入 hotfix — 完成
 
-1. 視實際使用需求補 history export/delete TUI 入口。
-2. 先定義 optional negative scoring／guess penalty 的明確語意與 config，再開發。
-3. 長期學習模型與 multi-writer 強化分開排程，不回頭阻塞 Quiz v1。
+- `jpnote paste` 預設 Wayland 剪貼簿行為不變。
+- `jpnote paste --stdin` 從標準輸入取得完整 JSON。
+- 所有來源共用既有 importer/preflight/mutation pipeline；沒有 schema 或 public JSON 變更。
+- `tests/test_paste_stdin.py` 與既有相關測試共 `13 passed`。
+- installed launcher 以 temporary `JPNOTE_DATA_DIR` 完成 read-only preflight 與正式匯入 smoke。
+- `--file PATH` 暫不加入；現有 `jpnote import FILE` 已涵蓋檔案輸入。
 
+### 下一個 checkpoint：使用回饋與 TUI polish
 
-### Phase 5 後續（不阻塞 v1）
+1. 是非題顯示改為 `○／×`，同步 question/feedback/history。
+2. `reorder_4` 回饋顯示完整句子並高亮可重組片段，保留無色 fallback。
+3. history export/delete TUI 入口、確認、刷新與空狀態。
+4. TUI 錯誤訊息與空狀態 polish。
+5. release artifact 自動化與 install/release script 整合。
 
-- history export/delete TUI 入口。
-- optional negative scoring／guess penalty。
+### 一般功能 backlog
 
-## 不阻塞 v1 的 backlog
+- 單字意思題降低漢字提示；使用假名 prompt 時，排除所有同讀音詞條的意思，無法保證唯一正解便 fallback 或跳過。
+- fuzzy duplicate candidate／確認流程。
+- AI context 精簡匯出。
+- `grammar_combinations`／結構化搭配資訊。
+- romaji 分隔與外來語語源欄位改善。
+- fzf 多選、未分類顯示、mistake level 空值處理。
+- multi-writer retry/serialization 與 attempt identity index optimization。
+
+### 低優先／不阻塞 Quiz v1
 
 - optional negative scoring／guess penalty。
 - response timing、streak、familiarity、spaced repetition。
 - radar chart、長期趨勢。
-- multi-writer retry/serialization。
-- attempt identity index optimization。
 
 ## 日常匯入安全規則
 
-預設可持續使用 `jpnote paste/import`。只有在明確標示「先暫停匯入」時暫停；主要適用於正式 core DB migration/repair/restore、固定 DB 快照、正式安裝升級驗證或可能同時寫入 core DB 的測試。純 Quiz/repository/temporary-DB 測試不需暫停。
+預設可持續使用 `jpnote paste`、`jpnote paste --stdin` 與 `jpnote import FILE`。只有在明確標示「先暫停匯入」時暫停；主要適用於正式 core DB migration/repair/restore、固定 DB 快照、正式安裝升級驗證或可能同時寫入 core DB 的測試。純 Quiz/repository/temporary-DB 測試不需暫停。
 
 ## 每階段驗收
 
