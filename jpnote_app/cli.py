@@ -143,6 +143,12 @@ def _read_clipboard() -> str:
     return result.stdout
 
 
+def _read_paste_input(args: argparse.Namespace) -> str:
+    if args.stdin:
+        return sys.stdin.read()
+    return _read_clipboard()
+
+
 def _write_clipboard(text: str) -> None:
     if shutil.which("wl-copy") is None:
         raise RuntimeError("找不到 wl-copy，無法複製預檢報告。")
@@ -576,7 +582,7 @@ def command_import(args: argparse.Namespace) -> int:
 
 
 def command_paste(args: argparse.Namespace) -> int:
-    return _run_import_text(_read_clipboard(), args)
+    return _run_import_text(_read_paste_input(args), args)
 
 
 def command_list(args: argparse.Namespace) -> int:
@@ -1488,7 +1494,12 @@ def build_parser() -> argparse.ArgumentParser:
     _add_import_options(p)
     p.set_defaults(func=command_import)
 
-    p = sub.add_parser("paste", help="從 Wayland 剪貼簿匯入")
+    p = sub.add_parser("paste", help="從 Wayland 剪貼簿或標準輸入匯入")
+    p.add_argument(
+        "--stdin",
+        action="store_true",
+        help="從標準輸入讀取完整 JSON；未指定時維持使用 Wayland 剪貼簿",
+    )
     _add_import_options(p)
     p.set_defaults(func=command_paste)
 
