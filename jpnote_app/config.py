@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-VERSION = "0.7.0"
+VERSION = "0.7.1"
 SCHEMA_VERSION = 5
 BACKUP_MAX_BYTES = 50 * 1024 * 1024
 AUXILIARY_BACKUP_MAX_BYTES = 50 * 1024 * 1024

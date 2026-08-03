@@ -1,4 +1,4 @@
-# jpnote v0.7.0
+# jpnote v0.7.1
 
 > **專案聲明**
 >
@@ -6,6 +6,17 @@
 
 本版將原本 1,200 多行的單檔腳本拆成可重用的核心模組與可選介面層。
 
+## v0.7.1 Import-first 與 writer serialization
+
+v0.7.1 以檔案匯入作為一般學習流程：
+
+```bash
+jpnote import jpnote-2026-08-03.json
+```
+
+完整匯入成功後，互動終端才會詢問是否刪除這次來源檔，預設保留。腳本可明確使用 `--delete-source` 或 `--keep-source`；非互動環境沒有明確選項時永遠保留。`paste --stdin` 仍是 SSH／pipe 備用入口。
+
+所有 core mutation 與 undo 現在以 persistent advisory lock 序列化；snapshot、commit、Markdown refresh 與 backup publication 不會再被另一個本機／SSH writer 插隊。匯入在真正 apply 前也會於鎖內重驗 preflight；若使用者確認後 DB 已被另一個 writer 改變，就拒絕套用過期決策並要求重跑。core schema 維持 v5、Quiz schema 維持 v2，public import JSON schema 不變。
 
 ## v0.7.0 Optional Quiz
 
@@ -335,13 +346,13 @@ jpnote recent --format json           # 結構化輸出
 ## 安裝
 
 ```bash
-mkdir -p /tmp/jpnote-v0.7.0
+mkdir -p /tmp/jpnote-v0.7.1
 
-tar -xzf ~/Downloads/jpnote-v0.7.0.tar.gz \
-  -C /tmp/jpnote-v0.7.0 \
+tar -xzf ~/Downloads/jpnote-v0.7.1.tar.gz \
+  -C /tmp/jpnote-v0.7.1 \
   --strip-components=1
 
-/tmp/jpnote-v0.7.0/install.sh
+/tmp/jpnote-v0.7.1/install.sh
 jpnote init
 ```
 

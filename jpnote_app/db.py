@@ -25,6 +25,7 @@ from .config import (
     restored_backup_dir,
 )
 from .fs_utils import ensure_private_dir, ensure_private_file
+from .writer_lock import writer_lock
 
 SCHEMA = """
 PRAGMA foreign_keys = ON;
@@ -387,15 +388,16 @@ def _create_sqlite_snapshot(destination: Path) -> Path:
 
 def create_backup(label: str, *, prune_after: bool = True) -> Path | None:
     """Create an atomic, integrity-checked SQLite snapshot for undo."""
-    ensure_directories()
-    path = db_path()
-    if not path.exists():
-        return None
-    destination = backup_dir() / f"undo-{timestamp_for_filename()}-{sanitize_label(label)}.db"
-    _create_sqlite_snapshot(destination)
-    if prune_after:
-        prune_backups()
-    return destination
+    with writer_lock(f"backup:{label}"):
+        ensure_directories()
+        path = db_path()
+        if not path.exists():
+            return None
+        destination = backup_dir() / f"undo-{timestamp_for_filename()}-{sanitize_label(label)}.db"
+        _create_sqlite_snapshot(destination)
+        if prune_after:
+            prune_backups()
+        return destination
 
 
 @dataclass(slots=True)
@@ -431,74 +433,76 @@ class MutationBackupHandle:
 def mutation_backup(label: str) -> Iterator[MutationBackupHandle]:
     """Publish an undo snapshot only after a successful real mutation.
 
-    The snapshot is first written under a hidden ``.pending-*`` name that is
-    excluded from ``active_backups()``.  Callers must invoke
-    :meth:`MutationBackupHandle.mark_changed` when SQLite data actually changed.
-    Failed and no-op operations remove the pending snapshot without pruning the
-    active backup pool.
+    One inter-process writer lock covers snapshot creation, the caller's
+    transaction and exports, and final backup publication.  This guarantees
+    that an undo snapshot always describes the state immediately before the
+    matching committed mutation, even when SSH/local writers start together.
     """
-    ensure_directories()
-    if not db_path().exists():
-        handle = MutationBackupHandle(None)
-        yield handle
-        return
-    stamp = timestamp_for_filename()
-    suffix = sanitize_label(label)
-    final_path = backup_dir() / f"undo-{stamp}-{suffix}.db"
-    pending_path = backup_dir() / f".pending-{stamp}-pid{os.getpid()}-{suffix}.db"
-    _create_sqlite_snapshot(pending_path)
-    handle = MutationBackupHandle(final_path)
-    try:
-        yield handle
-    except Exception:
-        # If the database mutation already committed but a later side effect
-        # (for example Markdown export) failed, retain the pre-mutation undo
-        # point instead of silently discarding it.
-        if handle.changed and pending_path.exists():
-            os.replace(pending_path, final_path)
-            ensure_private_file(final_path)
-            handle.published = True
-            prune_backups()
-        raise
-    else:
-        if handle.changed:
-            os.replace(pending_path, final_path)
-            ensure_private_file(final_path)
-            handle.published = True
-            prune_backups()
-    finally:
-        pending_path.unlink(missing_ok=True)
+    with writer_lock(f"mutation:{label}"):
+        ensure_directories()
+        if not db_path().exists():
+            handle = MutationBackupHandle(None)
+            yield handle
+            return
+        stamp = timestamp_for_filename()
+        suffix = sanitize_label(label)
+        final_path = backup_dir() / f"undo-{stamp}-{suffix}.db"
+        pending_path = backup_dir() / f".pending-{stamp}-pid{os.getpid()}-{suffix}.db"
+        _create_sqlite_snapshot(pending_path)
+        handle = MutationBackupHandle(final_path)
+        try:
+            yield handle
+        except Exception:
+            # If the database mutation already committed but a later side effect
+            # (for example Markdown export) failed, retain the pre-mutation undo
+            # point instead of silently discarding it.
+            if handle.changed and pending_path.exists():
+                os.replace(pending_path, final_path)
+                ensure_private_file(final_path)
+                handle.published = True
+                prune_backups()
+            raise
+        else:
+            if handle.changed:
+                os.replace(pending_path, final_path)
+                ensure_private_file(final_path)
+                handle.published = True
+                prune_backups()
+        finally:
+            pending_path.unlink(missing_ok=True)
 
 
 def create_recovery_snapshot(label: str) -> Path | None:
-    ensure_directories()
-    path = db_path()
-    if not path.exists():
-        return None
-    destination = backup_dir() / f"recovery-{timestamp_for_filename()}-{sanitize_label(label)}.db"
-    result = _create_sqlite_snapshot(destination)
-    prune_auxiliary_backups()
-    return result
+    with writer_lock(f"recovery-snapshot:{label}"):
+        ensure_directories()
+        path = db_path()
+        if not path.exists():
+            return None
+        destination = backup_dir() / f"recovery-{timestamp_for_filename()}-{sanitize_label(label)}.db"
+        result = _create_sqlite_snapshot(destination)
+        prune_auxiliary_backups()
+        return result
 
 
 def restore_database_from(backup_path: Path) -> None:
-    ensure_directories()
-    if not backup_path.is_file():
-        raise ValueError(f"找不到備份：{backup_path}")
-    if not _sqlite_integrity_ok(backup_path):
-        raise ValueError(f"備份完整性檢查失敗，拒絕復原：{backup_path}")
-    fd, temp_name = tempfile.mkstemp(prefix="jpnote-restore-", suffix=".db", dir=data_dir())
-    os.close(fd)
-    temp_path = Path(temp_name)
-    try:
-        with closing(sqlite3.connect(backup_path)) as source, closing(sqlite3.connect(temp_path)) as target:
-            source.backup(target)
-        for suffix in ("-wal", "-shm", "-journal"):
-            Path(str(db_path()) + suffix).unlink(missing_ok=True)
-        os.replace(temp_path, db_path())
-        ensure_private_file(db_path())
-    finally:
-        temp_path.unlink(missing_ok=True)
+    with writer_lock("restore-database"):
+        ensure_directories()
+        if not backup_path.is_file():
+            raise ValueError(f"找不到備份：{backup_path}")
+        if not _sqlite_integrity_ok(backup_path):
+            raise ValueError(f"備份完整性檢查失敗，拒絕復原：{backup_path}")
+        fd, temp_name = tempfile.mkstemp(prefix="jpnote-restore-", suffix=".db", dir=data_dir())
+        os.close(fd)
+        temp_path = Path(temp_name)
+        try:
+            with closing(sqlite3.connect(backup_path)) as source, closing(sqlite3.connect(temp_path)) as target:
+                source.backup(target)
+            for suffix in ("-wal", "-shm", "-journal"):
+                Path(str(db_path()) + suffix).unlink(missing_ok=True)
+            os.replace(temp_path, db_path())
+            ensure_private_file(db_path())
+        finally:
+            temp_path.unlink(missing_ok=True)
 
 
 def _needs_migration_backup(conn: sqlite3.Connection) -> bool:
@@ -644,17 +648,21 @@ def connect_preflight() -> ManagedConnection:
 
 
 def connect() -> ManagedConnection:
-    ensure_directories()
-    recover_orphaned_pending_backups()
-    conn = sqlite3.connect(db_path(), factory=ManagedConnection)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    try:
-        migrate_schema(conn)
-        ensure_private_file(db_path())
-    except Exception:
-        conn.close()
-        raise
+    # Opening an existing database may recover a crash-left snapshot or perform
+    # a schema migration.  Serialize that short initialization boundary too;
+    # callers doing a real mutation keep the same lock re-entrantly.
+    with writer_lock("database-initialization"):
+        ensure_directories()
+        recover_orphaned_pending_backups()
+        conn = sqlite3.connect(db_path(), factory=ManagedConnection)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+        try:
+            migrate_schema(conn)
+            ensure_private_file(db_path())
+        except Exception:
+            conn.close()
+            raise
     # Migration uses transaction context blocks internally.  Enable automatic
     # close only after initialization so those blocks do not close the
     # connection before it is returned to the caller.
@@ -663,9 +671,10 @@ def connect() -> ManagedConnection:
 
 
 def move_used_backup(path: Path) -> Path:
-    ensure_private_dir(restored_backup_dir())
-    destination = restored_backup_dir() / path.name
-    shutil.move(str(path), str(destination))
-    ensure_private_file(destination)
-    prune_auxiliary_backups()
-    return destination
+    with writer_lock("move-used-backup"):
+        ensure_private_dir(restored_backup_dir())
+        destination = restored_backup_dir() / path.name
+        shutil.move(str(path), str(destination))
+        ensure_private_file(destination)
+        prune_auxiliary_backups()
+        return destination

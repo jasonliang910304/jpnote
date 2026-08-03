@@ -1,8 +1,10 @@
 # jpnote 使用者操作手冊
 
-本手冊對應 jpnote v0.7.0。`jpnote --help` 提供精簡指令索引；`jpnote manual` 會輸出這份完整手冊，`jpnote manual --path` 會顯示手冊檔案位置。
+本手冊對應 jpnote v0.7.1。`jpnote --help` 提供精簡指令索引；`jpnote manual` 會輸出這份完整手冊，`jpnote manual --path` 會顯示手冊檔案位置。
 
 > 原則：任何會修改資料的操作都應先確認輸入與備份；`--check` 是真正 read-only 的預檢，不會建立、升級、修復或改寫實體資料庫。
+
+> v0.7.1：一般學習匯入以 `jpnote import FILE` 為主；完整成功後才可選擇刪除來源檔，預設保留。
 
 ---
 
@@ -20,7 +22,7 @@
 
 ```bash
 mkdir -p /tmp/jpnote-install
-tar -xzf jpnote-v0.7.0.tar.gz -C /tmp/jpnote-install --strip-components=1
+tar -xzf jpnote-v0.7.1.tar.gz -C /tmp/jpnote-install --strip-components=1
 /tmp/jpnote-install/install.sh
 rehash
 jpnote --version
@@ -110,9 +112,28 @@ jpnote repair --yes
 
 ## 3.1 從檔案匯入
 
+一般學習流程以檔案匯入為主：
+
 ```bash
 jpnote import FILE
 ```
+
+完整 validation、preflight、確認、SQLite commit、undo backup 與 Markdown refresh 成功後，互動終端才會顯示：
+
+```text
+是否刪除匯入來源檔？
+/path/to/FILE
+[y/N]
+```
+
+Enter 預設保留。也可明確指定：
+
+```bash
+jpnote import FILE --delete-source
+jpnote import FILE --keep-source
+```
+
+非互動與 `--format json` 在未指定旗標時一律保留，避免 SSH／script 卡在提示。`--check`、`--dry-run`、取消、no-selection 或任何匯入失敗都不會刪檔。正式 apply 前會在 writer lock 內重新確認目前 DB 的 preflight；若確認後已有其他 writer 改變結果，會拒絕匯入並要求重跑。刪除前會驗證來源仍是同一 regular file；symlink、替換或內容修改會拒絕。DB 已成功但刪檔失敗、提示收到 EOF 或 Ctrl-C 時，只會保留來源，匯入仍維持成功。
 
 ## 3.2 從 Wayland 剪貼簿或標準輸入匯入
 
@@ -1076,6 +1097,8 @@ undo
 ---
 
 # Part 14：版本變更
+
+v0.7.1 新增 multi-process writer／undo serialization，以及 import-first 的來源檔安全清理流程；成功後可互動選擇刪除，並提供 `--delete-source`／`--keep-source`。Core schema 維持 v5，Quiz schema 維持 v2，public import JSON schema 不變。
 
 v0.7.0 新增 optional Quiz、獨立 `quiz.db` schema v2、session/history、safe generators、正式 `jpnote quiz` CLI/config 與 Python-native TUI。Core schema 維持 v5，public import JSON schema 不變。
 

@@ -1,9 +1,41 @@
 # jpnote 開發路線圖
 
-最後更新：2026-07-25（Asia/Taipei）
-正式 release 基準：v0.7.0
-正式安裝版本：0.7.0
-目前開發位置：v0.7.0 release 完成；`paste --stdin`、installed fzf helper 與 Quiz 啟動回應 maintenance 已完成
+最後更新：2026-08-03（Asia/Taipei）
+正式 release/tag：v0.7.1；annotated tag 應指向本文件所在 release commit
+正式安裝版本：0.7.1
+目前開發位置：v0.7.1 release gate 完成；下一階段回到既有高優先 backlog
+
+## 0.7.1 高優先主軸 — completed
+
+### A. multi-process writer／undo ordering — 第一階段已實作
+
+- persistent advisory writer lock，不刪 lock file，process crash 由 kernel 自動釋放；拒絕 symlink／hard link／非一般檔案／非目前使用者擁有的 lock file。
+- lock 覆蓋 mutation snapshot → transaction → export → backup publication。
+- undo 覆蓋 target selection → recovery snapshot → restore → relocation → export。
+- connect migration／orphan pending recovery、manual backup/init/export 走同一鎖。
+- regression：兩個 process 同時寫入時，第二份 undo snapshot 必須包含第一個 process 已 commit 的狀態；正式 import apply 前在鎖內重驗 DB state，拒絕使用過期 preflight。
+
+### B. import-first＋來源檔清理 — 第一階段已實作
+
+- `jpnote import FILE` 使用單次驗證後來源快照。
+- 成功後互動詢問刪檔，預設保留；`--delete-source`／`--keep-source` 可明確控制。
+- 非互動／JSON 預設保留；check、dry-run、取消、失敗、no-selection 不刪。
+- final symlink、來源替換／修改 fail closed；post-commit 刪檔錯誤、EOF／Ctrl-C 只保留來源並維持 import 成功。
+
+### 已完成 gate
+
+- clean `ca3e51e` 套用與 `git diff --check`：PASS。
+- targeted regression：`16 passed`；完整 suite：`401 passed, 18 subtests passed`。
+- temporary installed smoke：互動保留／刪除、noninteractive keep、explicit delete、check/failure no-delete、undo、backup/export/stats、writer-lock metadata：PASS。
+- 正式 DB SQLite 副本：quick check／foreign key PASS；audit 無 critical／needs_input。
+
+### Release completion
+
+- 完整 regression：`401 passed, 18 subtests passed`。
+- versioned isolated install、正式安裝與同版本 reinstall backup：PASS。
+- 正式 DB 安裝前後 SHA-256 相同；quick check 與 foreign-key check：PASS。
+- 正式 DB read-only copy smoke：453 items、27 attempts、critical 0、needs_input 0。
+- annotated `v0.7.1` tag 應指向本文件所在 release commit。
 
 ## 已通過的前置 gate
 

@@ -1,4 +1,13 @@
 # Changelog
+## 0.7.1 — 2026-08-03
+- 新增 core process-wide writer lock；同一個鎖會覆蓋 mutation 前 snapshot、SQLite transaction、Markdown refresh 與 undo backup publication，避免本機／SSH 同時寫入時 backup 順序和實際 commit 順序錯位。lock file 拒絕 symlink、hard link、非一般檔案與非目前使用者擁有的檔案。
+- `jpnote undo` 的 backup 選擇、recovery snapshot、restore、used-backup relocation 與 Markdown refresh 現在位於同一 writer lock；manual backup、init、export 與可能執行 migration／pending-backup recovery 的 writable connect 也共用相同鎖。
+- `jpnote import FILE` 改用單次、拒絕 final symlink 的安全來源快照；正式 apply 前會在 writer lock 內重驗目前 DB preflight，確認後若有其他 writer 改變結果就 fail closed 並要求重跑。完整匯入成功後才詢問是否刪除來源檔，預設 `[y/N]` 保留。
+- 新增 `--delete-source` 與 `--keep-source`；非互動／JSON 模式預設保留，`--check`、dry-run、取消、no-selection 或匯入失敗絕不刪除。
+- 刪除前會再次確認來源仍為同一 regular file，且 device/inode/size/mtime/ctime 未變；來源被修改、替換或改成 symlink 時 fail closed。刪檔失敗、提示 EOF 或 Ctrl-C 都只保留來源，不會把已成功的 DB 匯入誤報成失敗。
+- 新增 import-source 與 multi-process writer/undo snapshot-order regression tests。core schema 維持 v5；public import JSON schema 不變。
+- Release-candidate gate：targeted regression `16 passed`；完整 suite `401 passed, 18 subtests passed`；隔離安裝、互動保留／刪除、非互動預設保留、check／失敗不刪、undo serialization、manual backup/export/stats 與 writer-lock metadata smoke 均通過。
+- 正式 DB 的 SQLite 安全副本：`quick_check=ok`、foreign-key violations 0、453 items、27 attempts；audit 共 343 筆，其中 342 筆為 `missing_accent` info、1 筆為既有 `possible_origin_missing` review，無 critical／needs_input。core schema 維持 v5；Quiz schema 維持 v2。
 
 ## 0.7.0
 

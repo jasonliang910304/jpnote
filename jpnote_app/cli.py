@@ -45,6 +45,7 @@ from .db import (
 from .export_markdown import export_all
 from .fs_utils import atomic_write_text, ensure_private_dir
 from .import_resolution import resolve_import_plan
+from .import_source import ImportSource
 from .import_safe_fixes import apply_safe_import_fixes
 from .import_preflight import (
     blocking_preflight_messages,
@@ -52,6 +53,7 @@ from .import_preflight import (
     render_preflight_json,
     render_preflight_text,
 )
+from .models import ImportPlan
 from .mutations import execute_safe_mutation
 from .romaji_maintenance import romaji_audit_records, safe_romaji_candidates, apply_safe_romaji_normalization
 from .repository import (
@@ -67,6 +69,7 @@ from .repository import (
 )
 from .services import (
     apply_import,
+    detect_duplicate_warnings,
     duplicate_candidates,
     filter_import_plan,
     merge_entries,
@@ -86,6 +89,7 @@ from .validation import (
     validate_entry_edit_fields, validate_item,
 )
 from .terminal_style import configure as configure_color
+from .writer_lock import writer_lock
 
 
 def _json(data: Any) -> None:
@@ -294,6 +298,43 @@ def _confirm_yes_no(prompt: str) -> bool:
     return answer in {"y", "yes"}
 
 
+def _cleanup_import_source(source: ImportSource, args: argparse.Namespace) -> dict[str, str]:
+    """Optionally remove one successfully consumed import file.
+
+    Cleanup is deliberately post-commit and fail-soft: a refusal or filesystem
+    error never rolls back or misreports an already successful database import.
+    """
+    delete_requested = bool(getattr(args, "delete_source", False))
+    keep_requested = bool(getattr(args, "keep_source", False))
+
+    if keep_requested:
+        return {"status": "kept", "path": str(source.path), "reason": "explicit_keep"}
+
+    if not delete_requested:
+        if args.format == "json" or not sys.stdin.isatty():
+            return {"status": "kept", "path": str(source.path), "reason": "noninteractive_default"}
+        print("\n是否刪除匯入來源檔？")
+        print(source.path)
+        try:
+            confirmed = _confirm_yes_no("[y/N] ")
+        except (EOFError, KeyboardInterrupt):
+            print(f"\n已保留匯入來源檔：{source.path}")
+            return {"status": "kept", "path": str(source.path), "reason": "prompt_interrupted"}
+        if not confirmed:
+            print(f"已保留匯入來源檔：{source.path}")
+            return {"status": "kept", "path": str(source.path), "reason": "user_declined"}
+
+    try:
+        source.delete_if_unchanged()
+    except (OSError, RuntimeError) as exc:
+        print(f"警告：匯入已成功，但來源檔未刪除：{exc}", file=sys.stderr)
+        return {"status": "delete_failed", "path": str(source.path), "reason": str(exc)}
+
+    if args.format != "json":
+        print(f"已刪除匯入來源檔：{source.path}")
+    return {"status": "deleted", "path": str(source.path), "reason": ""}
+
+
 def _print_apply_preflight(report: dict[str, Any], args: argparse.Namespace, *, heading: str = "") -> None:
     output = sys.stderr if args.format == "json" else sys.stdout
     if heading and args.format != "json":
@@ -303,7 +344,63 @@ def _print_apply_preflight(report: dict[str, Any], args: argparse.Namespace, *, 
     output.flush()
 
 
-def _run_import_text(text: str, args: argparse.Namespace) -> int:
+def _warning_signature(warning: Any) -> tuple[str, str, str, str]:
+    return (
+        str(warning.code),
+        str(warning.scope),
+        str(warning.incoming_key),
+        str(warning.other_key),
+    )
+
+
+def _apply_import_if_preflight_current(
+    conn: sqlite3.Connection,
+    selected: Any,
+    approved_report: dict[str, Any],
+) -> Any:
+    """Rebuild and verify the import plan while holding the writer lock.
+
+    The user-facing preflight intentionally happens before lock acquisition so
+    an interactive prompt cannot block every other writer.  Immediately before
+    apply, rebuild the normalized plan against the now-current database.  Any
+    newly discovered duplicate warning or outcome drift aborts safely and asks
+    the caller to rerun instead of applying a stale approval.
+    """
+    # Keep normalized internal markers (especially generated attempt identity)
+    # exactly as approved; only duplicate warnings are database-dependent and
+    # must be recomputed against the current locked state.
+    current = ImportPlan(
+        source=selected.source,
+        items=selected.items,
+        attempts=selected.attempts,
+        warnings=detect_duplicate_warnings(conn, selected.items),
+        notes=list(selected.notes),
+    )
+
+    approved_warnings = {_warning_signature(item) for item in selected.warnings}
+    new_warnings = [
+        item for item in current.warnings
+        if _warning_signature(item) not in approved_warnings
+    ]
+    if new_warnings:
+        raise RuntimeError(
+            "資料庫在確認後出現新的疑似重複項目；為避免依過期預檢匯入，請重新執行。"
+        )
+
+    current_report = build_preflight_report(conn, current)
+    if current_report != approved_report:
+        raise RuntimeError(
+            "資料庫在確認後已變更，匯入結果不再符合剛才的預檢；請重新執行。"
+        )
+    return apply_import(conn, current)
+
+
+def _run_import_text(
+    text: str,
+    args: argparse.Namespace,
+    *,
+    source: ImportSource | None = None,
+) -> int:
     if args.check and args.dry_run:
         raise ValueError("--check 與 --dry-run 請擇一使用。")
     payload = parse_payload(text)
@@ -443,13 +540,20 @@ def _run_import_text(text: str, args: argparse.Namespace) -> int:
 
     execution = execute_safe_mutation(
         "import",
-        lambda conn: apply_import(conn, selected),
+        lambda conn: _apply_import_if_preflight_current(conn, selected, report),
     )
     result = execution.value
     modified = execution.modified
     backup = execution.backup
     if args.format == "json":
-        _json({"result": result.to_dict(), "backup": str(backup) if backup else ""})
+        cleanup = _cleanup_import_source(source, args) if source is not None else None
+        output: dict[str, Any] = {
+            "result": result.to_dict(),
+            "backup": str(backup) if backup else "",
+        }
+        if cleanup is not None:
+            output["source_cleanup"] = cleanup
+        _json(output)
     else:
         print(
             "匯入完成：新增 {added_entries}、更新 {updated_entries}、未變更 {unchanged_entries} 個項目；"
@@ -464,11 +568,14 @@ def _run_import_text(text: str, args: argparse.Namespace) -> int:
             print(f"Markdown 已更新：{export_dir()}")
         else:
             print("資料內容未變更；未建立新備份，也未重新產生 Markdown。")
+        if source is not None:
+            _cleanup_import_source(source, args)
     return 0
 
 def command_init(_: argparse.Namespace) -> int:
-    with connect() as conn:
-        export_all(conn)
+    with writer_lock("init"):
+        with connect() as conn:
+            export_all(conn)
     settings = ensure_preferences()
     print(f"已建立／升級資料庫：{db_path()}")
     print(f"匯出目錄：{export_dir()}")
@@ -578,7 +685,8 @@ def command_quiz(args: argparse.Namespace) -> int:
 
 
 def command_import(args: argparse.Namespace) -> int:
-    return _run_import_text(Path(args.file).expanduser().read_text(encoding="utf-8"), args)
+    source = ImportSource.read(args.file)
+    return _run_import_text(source.text, args, source=source)
 
 
 def command_paste(args: argparse.Namespace) -> int:
@@ -1242,8 +1350,9 @@ def command_repair(args: argparse.Namespace) -> int:
 
 
 def command_export(args: argparse.Namespace) -> int:
-    with connect() as conn:
-        paths = export_all(conn)
+    with writer_lock("manual-export"):
+        with connect() as conn:
+            paths = export_all(conn)
     if args.format == "json":
         _json([str(path) for path in paths])
     else:
@@ -1316,25 +1425,27 @@ def _select_undo_backup(selector: str | None) -> tuple[Path | None, list[Path]]:
 def command_undo(args: argparse.Namespace) -> int:
     if args.list:
         return command_backups(args)
-    target, backups = _select_undo_backup(args.backup)
-    if not backups:
-        print("沒有可復原的備份。")
-        return 1
-    if target is None:
-        print("所有可用 backup 都未通過完整性檢查。", file=sys.stderr)
-        return 1
-    if not backup_integrity_ok(target):
-        raise ValueError(f"指定 backup 已損壞，拒絕復原：{target.name}")
-    if args.backup is None and target != backups[0]:
-        print(f"最新 backup 已損壞；改用較舊的有效 backup：{target.name}", file=sys.stderr)
+    with writer_lock("undo"):
+        target, backups = _select_undo_backup(args.backup)
+        if not backups:
+            print("沒有可復原的備份。")
+            return 1
+        if target is None:
+            print("所有可用 backup 都未通過完整性檢查。", file=sys.stderr)
+            return 1
+        if not backup_integrity_ok(target):
+            raise ValueError(f"指定 backup 已損壞，拒絕復原：{target.name}")
+        if args.backup is None and target != backups[0]:
+            print(f"最新 backup 已損壞；改用較舊的有效 backup：{target.name}", file=sys.stderr)
 
-    # Validate the target before creating a recovery snapshot, so a corrupt
-    # selection never creates extra recovery files or changes current state.
-    recovery = create_recovery_snapshot("before-undo")
-    restore_database_from(target)
-    used = move_used_backup(target)
-    with connect() as conn:
-        export_all(conn)
+        # The same writer lock covers selection, recovery snapshot, restore,
+        # backup relocation, and Markdown refresh.  No import can commit in the
+        # middle and then be silently overwritten by a stale undo target.
+        recovery = create_recovery_snapshot("before-undo")
+        restore_database_from(target)
+        used = move_used_backup(target)
+        with connect() as conn:
+            export_all(conn)
     print(f"已復原：{used.name}")
     if recovery:
         print(f"復原前狀態：{recovery}")
@@ -1492,6 +1603,17 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("import", help="從 JSON 檔案匯入")
     p.add_argument("file")
     _add_import_options(p)
+    source_cleanup = p.add_mutually_exclusive_group()
+    source_cleanup.add_argument(
+        "--delete-source",
+        action="store_true",
+        help="完整匯入成功後刪除本次來源檔；檔案若被修改、替換或變成 symlink 會拒絕",
+    )
+    source_cleanup.add_argument(
+        "--keep-source",
+        action="store_true",
+        help="完整匯入成功後保留來源檔，並停用互動詢問",
+    )
     p.set_defaults(func=command_import)
 
     p = sub.add_parser("paste", help="從 Wayland 剪貼簿或標準輸入匯入")

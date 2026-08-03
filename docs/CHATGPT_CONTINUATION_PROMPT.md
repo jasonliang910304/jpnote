@@ -14,15 +14,15 @@
 
 ## 目前基準
 
-- 正式 release/tag 基準：`jpnote v0.7.0`
-- 正式安裝版本：`jpnote 0.7.0`
+- 正式 release/tag：`jpnote v0.7.1`；annotated tag 必須指向本文件所在 release commit
+- 正式安裝版本：`jpnote 0.7.1`
 - core SQLite schema：v5
 - Quiz SQLite：獨立 `quiz.db`，schema v2
 - stability gate：通過
 - Quiz 開發已完成 Phase 1–4，以及 Phase 5 TUI、usability/question-quality、正式 CLI/config、互動式 filters/history navigation、history 逐題檢視與隔離安裝 smoke
-- 最新完整測試：`378 passed, 18 subtests passed`
+- v0.7.1 最新完整測試：`401 passed, 18 subtests passed`；targeted `16 passed`
 - app-only coverage：`76%`
-- 隔離安裝、release-readiness、正式 DB 副本、前版升級、真實安裝與 TUI smoke：PASS
+- v0.7.1 versioned isolated install、正式安裝、正式 DB 保護與 read-only copy smoke：PASS；audit 無 critical／needs_input
 - post-release commits：`a660950`（是非題回饋標籤）、`74fb82a`（`paste --stdin`）
 - `paste --stdin` targeted regression：`13 passed`；temporary-data installed smoke：PASS
 - post-release maintenance：installed fzf helper isolated bootstrap、Quiz 準備畫面 refresh、session question batch insert
@@ -79,7 +79,7 @@ jpnote --version
 
 ## 下一個正確工作項目
 
-目前完整排程：
+v0.7.1 release gate 已完成。下一個正式工作項目：
 
 1. 是非題顯示改為 `○／×`，同步 question/feedback/history。
 2. `reorder_4` 顯示完整句子並高亮重組片段，提供無色 fallback。
@@ -88,7 +88,7 @@ jpnote --version
 5. release artifact 自動化與 install/release script 整合。
 6. 單字漢字洩題改善；假名 prompt 必須排除所有同讀音詞條的意思，確保唯一答案。
 7. fuzzy candidates、AI context、grammar combinations、romaji／語源、fzf／未分類／mistake level。
-8. multi-writer／identity index。
+8. identity index；multi-writer 第一階段已進入 0.7.1 active gate。
 9. 低優先：負分制、timing、streak、familiarity、spaced repetition、radar／trends。
 
 不要因非 blocking finding 重啟同規模廣域健檢；優先依實際使用回饋做針對性修正。

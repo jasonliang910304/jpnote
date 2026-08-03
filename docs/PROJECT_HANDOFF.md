@@ -1,15 +1,38 @@
 # jpnote 專案交接紀錄
 
-最後更新：2026-07-25（Asia/Taipei）
-正式 release 基準：`jpnote v0.7.0`
-正式安裝版本：`jpnote 0.7.0`
-目前開發 checkpoint：post-v0.7.0 installed fzf helper 修正與 Quiz 啟動回應改善完成
+最後更新：2026-08-03（Asia/Taipei）
+正式 release/tag：`jpnote v0.7.1`；annotated tag 應指向本文件所在 release commit
+正式安裝版本：`jpnote 0.7.1`
+目前開發 checkpoint：v0.7.1 release gate 完成；本文件所在 commit 為 release commit
 
 用途：讓新的 ChatGPT 對話或新的開發工作階段，不依賴舊聊天內容也能直接接續工作。
 
 ---
 
 ## 1. 目前可信基準
+
+### 2026-08-03 實際 Git 基線
+
+```text
+branch=main
+HEAD=ca3e51e662c09ee7cde14f76ff4daae60a29e21b
+origin/main=ca3e51e662c09ee7cde14f76ff4daae60a29e21b
+v0.7.0^{}=8db858fa808d948f8322abda9c882b7785c06ac8
+working tree=clean
+```
+
+狀態不明、因 Work 額度耗盡的工作一律視為失敗／未完成，不可算入基線。
+
+### 0.7.1 completed release scope
+
+- 高優先：core multi-process writer／undo lock。
+- 高優先：一般學習改為 `jpnote import FILE`，成功後可選擇刪除來源檔。
+- `paste --stdin` 保留 SSH／pipe 備用。
+- 實作前固定做風險預演；本階段已特別處理 snapshot/commit ordering、undo race、確認後 DB drift、lock-file symlink/hard-link、來源替換、in-place modification、非互動卡住、cleanup prompt 中斷與 post-commit cleanup failure。
+- 程式版本與正式安裝皆為 0.7.1；本文件所在 commit 為 v0.7.1 release commit。
+- 桌機 targeted regression：`16 passed`；完整 regression：`401 passed, 18 subtests passed`。
+- 隔離 installed smoke：launcher/manual/init、explicit keep/delete、noninteractive keep、check/failure no-delete、undo、backup/export/stats、writer-lock metadata 與互動 `[y/N]` 全部 PASS。
+- 正式 DB SQLite 副本：quick check PASS、foreign-key violations 0、453 items、27 attempts；audit 342 info `missing_accent`＋1 review `possible_origin_missing`，無 critical／needs_input。
 
 ### 正式 release
 
