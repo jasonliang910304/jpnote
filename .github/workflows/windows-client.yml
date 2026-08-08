@@ -25,7 +25,9 @@ permissions:
 
 jobs:
   protocol:
-    runs-on: windows-latest
+    # jpnote core writer serialization uses POSIX fcntl.
+    # Windows runners are reserved for the PowerShell client jobs below.
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
