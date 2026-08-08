@@ -1,4 +1,13 @@
 # Changelog
+## 0.7.2 — 2026-08-03
+
+- 新增 `jpnote import --stdin`／`jpnote import -`，以 16 MiB 上限、strict UTF-8 與 optional BOM 支援直接接收 SSH／pipe 傳入的正式 import payload。
+- 新增 versioned `jpnote.import.v1` JSON protocol；wire output 為 ASCII-safe，錯誤同樣回傳結構化 envelope。protocol check 產生 `preflight_token`，apply 可拒絕內容或相關 DB outcome 已漂移的過期確認。
+- 新增 repository-owned Windows PowerShell client，支援 PowerShell 5.1／7、選檔器、UTF-8／JSON 驗證、SSH stdin、遠端 protocol 驗證及成功後安全刪除 Windows 來源檔。
+- Windows client 拒絕 reparse point、超過 16 MiB 的來源、預檢後被修改／替換的檔案，以及仍有 review/conflict 的 preflight；不使用剪貼簿、Base64 或 Arch 暫存檔。
+- 新增版本化 module manifest、可回退安裝／移除腳本，以及 Windows runner 上的 Python protocol、Windows PowerShell 5.1 與 PowerShell 7 CI。
+- core SQLite schema 維持 v5、Quiz schema 維持 v2；public import JSON schema 不變。
+
 ## 0.7.1 — 2026-08-03
 - 新增 core process-wide writer lock；同一個鎖會覆蓋 mutation 前 snapshot、SQLite transaction、Markdown refresh 與 undo backup publication，避免本機／SSH 同時寫入時 backup 順序和實際 commit 順序錯位。lock file 拒絕 symlink、hard link、非一般檔案與非目前使用者擁有的檔案。
 - `jpnote undo` 的 backup 選擇、recovery snapshot、restore、used-backup relocation 與 Markdown refresh 現在位於同一 writer lock；manual backup、init、export 與可能執行 migration／pending-backup recovery 的 writable connect 也共用相同鎖。

@@ -8,6 +8,8 @@ import stat
 from dataclasses import dataclass
 from pathlib import Path
 
+from .import_transport import MAX_IMPORT_BYTES
+
 
 @dataclass(frozen=True, slots=True)
 class SourceIdentity:
@@ -61,7 +63,11 @@ class ImportSource:
             before = os.fstat(fd)
             if not stat.S_ISREG(before.st_mode):
                 raise ValueError(f"匯入來源必須是一般檔案：{path}")
-            with os.fdopen(fd, "r", encoding="utf-8", closefd=False) as handle:
+            if before.st_size > MAX_IMPORT_BYTES:
+                raise ValueError(
+                    f"匯入來源超過大小上限 {MAX_IMPORT_BYTES} bytes：{path}"
+                )
+            with os.fdopen(fd, "r", encoding="utf-8-sig", closefd=False) as handle:
                 text = handle.read()
                 after = os.fstat(handle.fileno())
             before_identity = SourceIdentity.from_stat(before)

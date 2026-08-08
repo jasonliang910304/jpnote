@@ -1,9 +1,9 @@
 # jpnote 專案交接紀錄
 
-最後更新：2026-08-03（Asia/Taipei）
-正式 release/tag：`jpnote v0.7.1`；annotated tag 應指向本文件所在 release commit
-正式安裝版本：`jpnote 0.7.1`
-目前開發 checkpoint：v0.7.1 release gate 完成；本文件所在 commit 為 release commit
+最後更新：2026-08-08（Asia/Taipei）
+正式 release/tag：`jpnote v0.7.2`；annotated tag 應指向本文件所在 release commit
+正式安裝版本：`jpnote 0.7.2`
+目前開發 checkpoint：v0.7.2 release gate 完成；本文件所在 commit 為 release commit
 
 用途：讓新的 ChatGPT 對話或新的開發工作階段，不依賴舊聊天內容也能直接接續工作。
 
@@ -11,17 +11,27 @@
 
 ## 1. 目前可信基準
 
-### 2026-08-03 實際 Git 基線
+### 2026-08-08 release baseline
 
 ```text
 branch=main
-HEAD=ca3e51e662c09ee7cde14f76ff4daae60a29e21b
-origin/main=ca3e51e662c09ee7cde14f76ff4daae60a29e21b
-v0.7.0^{}=8db858fa808d948f8322abda9c882b7785c06ac8
+HEAD=origin/main=v0.7.2^{}=<本文件所在 release commit>
 working tree=clean
 ```
 
+上一個 release 基線：`v0.7.1`＝`e5ac8a800061c950f25586b28dd2c8c51c0d7850`。
+
 狀態不明、因 Work 額度耗盡的工作一律視為失敗／未完成，不可算入基線。
+
+### 0.7.2 completed release scope
+
+- 高優先：把 Windows 遠端匯入改為 repository-owned、versioned client，而不是 PowerShell profile／聊天附件中的孤立 helper。
+- core 新增 `jpnote import --stdin`／`jpnote import -`、16 MiB bounded strict UTF-8 transport 與 `jpnote.import.v1` JSON protocol。
+- protocol check 以 SHA-256 `preflight_token` 綁定 normalized plan 與相關 DB outcome；正式 apply 前若 token 或 writer-lock 內重建結果不同便 fail closed。
+- Windows module 支援 PowerShell 5.1／7、OpenFileDialog、SSH stdin、遠端 protocol validation、review/conflict fail closed，以及匯入成功後的本機來源安全刪除。
+- module／installer／uninstaller 位於 `clients/windows/`；GitHub Actions 會在 Windows runner 同時跑 Python protocol、Windows PowerShell 5.1、PowerShell 7，以及 install/reinstall/uninstall。
+- 不使用剪貼簿、Base64 或遠端暫存檔；core schema v5、Quiz schema v2、public import JSON schema 均不變。
+- 新功能 targeted：`20 passed`；完整 Arch regression：`421 passed, 18 subtests passed`；versioned isolated install 與正式 install/DB hash/read-only smoke PASS；Windows PowerShell 5.1＋SSH 實機匯入及後續兩日使用 PASS。
 
 ### 0.7.1 completed release scope
 
@@ -37,9 +47,9 @@ working tree=clean
 ### 正式 release
 
 - branch：`main`
-- release tag：`v0.7.0`
+- release tag：`v0.7.2`
 - core SQLite schema：`5`
-- public import JSON schema：v0.7.0 相容，Quiz 未新增欄位
+- public import JSON schema：v0.7.1 相容，v0.7.2 未新增欄位
 - v0.7.0 release gate：通過
 - post-release 功能 commit：`a660950`（是非題回饋標籤釐清）、`74fb82a`（`jpnote paste --stdin`）
 - 最新 maintenance checkpoint：installed fzf helper 以 isolated bootstrap 啟動；Quiz 開始前立即顯示準備畫面，session 題目寫入改用 batch insert。
@@ -142,15 +152,24 @@ Quiz history 不寫入既有教材 `attempts`。
 
 ## 3. 下一個正確工作項目
 
-### 近期高優先／使用回饋
+### v0.7.2 release completion
 
-1. Quiz 是非題 presentation 改為 `○／×`；底層 `true／false` ID 維持不變，並同步即時回饋與 history。
-2. `reorder_4` 回饋顯示包含固定題幹的完整句子；可重組片段使用 ANSI 高亮，並提供 `NO_COLOR` fallback。
-3. TUI history export/delete 入口、刪除確認、刷新與空狀態（headless store/API 已完成）。
-4. TUI 錯誤訊息與空狀態 polish。
-5. 評估 `jpnote paste --file PATH` 是否值得作為 `jpnote import FILE` 的便利 alias；若擴大介面則維持既有 `import FILE`。
-6. release artifact 自動化：source tar.gz、release patch、SHA-256、GitHub Release assets。
-7. install/release script 整合。
+- actual Arch repository gate：`421 passed, 18 subtests passed`。
+- versioned isolated install／stdin protocol smoke：PASS。
+- 正式安裝 `jpnote 0.7.2`；安裝前後正式 DB SHA-256 相同；當次資料 486 entries／27 attempts，copy audit critical 0／needs_input 0。
+- Windows PowerShell 5.1＋既有 SSH alias `jpnote`：實機 check/import/source cleanup 通過，且後續兩日使用正常。
+- core schema v5、Quiz schema v2、public import JSON schema 均未變。
+
+### v0.7.2 後近期高優先／使用回饋
+
+1. 有邊界的安全／穩定性 gate：優先檢查 atomic revisioned installer／真正 rollback、read-only command side effects、CI／版本相容、backup/undo/Quiz DB 權限與已知高風險 failure paths；通過後停止同規模廣域健檢。
+2. 匯入預檢更新明細：只要 preflight 有同 stable key 更新／合併，摘要後逐筆列 type、display、stable key，必要時顯示主要欄位變更；適用本機 `--check`、一般 import 內建 check、Windows `Test-JpnoteFile` 與 `Import-JpnoteFile`。
+3. Quiz 題數支援直接輸入自訂數字，避免從預設 10 題反覆按到 50；需驗證正整數並清楚處理超過可用題數。
+4. Quiz 是非題 presentation 改為 `○／×`；底層 `true／false` ID 維持不變，並同步即時回饋與 history。
+5. `reorder_4` 回饋顯示包含固定題幹的完整句子；可重組片段使用 ANSI 高亮，並提供 `NO_COLOR` fallback。
+6. 單字意思題降低漢字洩題；假名 prompt 必須排除所有同讀音詞條的意思，確保唯一答案。
+7. 手機 Quiz 介面架構 spike：SSH/TUI 僅作臨時／備援，優先評估 Tailscale-only Web／PWA、受限 API、認證、session／斷線恢復與多裝置安全邊界。
+8. Quiz 啟動效能／動態 loading、TUI history polish 與 grammar 詳細頁 hanging indent。
 
 ### 一般優先
 

@@ -1,10 +1,29 @@
-# jpnote v0.7.1
+# jpnote v0.7.2
 
 > **專案聲明**
 >
 > jpnote 的構想、功能需求、使用情境與開發方向由 **Jason Liang** 提供；本專案的所有程式碼均由 **OpenAI ChatGPT** 產生。Jason Liang 負責實際使用、測試、問題回報，以及功能與設計取捨。
 
 本版將原本 1,200 多行的單檔腳本拆成可重用的核心模組與可選介面層。
+
+## v0.7.2 Cross-platform import protocol 與 Windows client
+
+v0.7.2 將 Windows 遠端匯入納入正式 repository，而不是維持成 PowerShell profile 中的孤立腳本：
+
+- `jpnote import --stdin` 與 `jpnote import -` 直接從 UTF-8 標準輸入使用正式 import pipeline。
+- `--protocol 1` 提供 `jpnote.import.v1`、ASCII-safe 的 machine-readable JSON envelope；成功與錯誤都能由遠端 client fail closed 解析。
+- protocol 預檢會回傳 SHA-256 `preflight_token`；正式匯入可用 `--preflight-token` 綁定剛才顯示的 normalized plan／DB outcome，內容或相關 DB 狀態漂移時拒絕套用過期確認。
+- `clients/windows/` 提供正式、版本化的 PowerShell 5.1／7 module、安裝器、移除器與 Windows CI。
+- Windows client 嚴格讀取 UTF-8、限制 16 MiB、拒絕 reparse point，直接把原始 JSON bytes 經 SSH stdin 傳送，不使用剪貼簿、Base64 或遠端暫存檔；Arch 完整成功後才允許刪除未被替換的 Windows 來源檔。
+- core schema 維持 v5、Quiz schema 維持 v2，public import JSON schema 不變。
+
+Windows client 快速使用：
+
+```powershell
+.\clients\windows\Install-JpnoteWindowsClient.ps1
+Test-JpnoteFile
+Import-JpnoteFile
+```
 
 ## v0.7.1 Import-first 與 writer serialization
 
@@ -346,13 +365,13 @@ jpnote recent --format json           # 結構化輸出
 ## 安裝
 
 ```bash
-mkdir -p /tmp/jpnote-v0.7.1
+mkdir -p /tmp/jpnote-v0.7.2
 
-tar -xzf ~/Downloads/jpnote-v0.7.1.tar.gz \
-  -C /tmp/jpnote-v0.7.1 \
+tar -xzf ~/Downloads/jpnote-v0.7.2.tar.gz \
+  -C /tmp/jpnote-v0.7.2 \
   --strip-components=1
 
-/tmp/jpnote-v0.7.1/install.sh
+/tmp/jpnote-v0.7.2/install.sh
 jpnote init
 ```
 

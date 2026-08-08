@@ -1,0 +1,17 @@
+{
+  "source": "Windows 匯入測試 2026-08-03",
+  "items": [
+    {
+      "key": "vocab:動作確認",
+      "type": "vocabulary",
+      "display": "動作確認",
+      "reading": "どうさかくにん",
+      "meanings": [
+        "動作確認；確認功能是否正常運作"
+      ],
+      "aliases": [
+        "動作確認する"
+      ]
+    }
+  ]
+}

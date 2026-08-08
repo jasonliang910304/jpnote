@@ -1,10 +1,10 @@
 # jpnote 使用者操作手冊
 
-本手冊對應 jpnote v0.7.1。`jpnote --help` 提供精簡指令索引；`jpnote manual` 會輸出這份完整手冊，`jpnote manual --path` 會顯示手冊檔案位置。
+本手冊對應 jpnote v0.7.2。`jpnote --help` 提供精簡指令索引；`jpnote manual` 會輸出這份完整手冊，`jpnote manual --path` 會顯示手冊檔案位置。
 
 > 原則：任何會修改資料的操作都應先確認輸入與備份；`--check` 是真正 read-only 的預檢，不會建立、升級、修復或改寫實體資料庫。
 
-> v0.7.1：一般學習匯入以 `jpnote import FILE` 為主；完整成功後才可選擇刪除來源檔，預設保留。
+> v0.7.2：Windows 遠端匯入使用 repository 內的正式 PowerShell client；一般本機流程仍以 `jpnote import FILE` 為主。
 
 ---
 
@@ -22,7 +22,7 @@
 
 ```bash
 mkdir -p /tmp/jpnote-install
-tar -xzf jpnote-v0.7.1.tar.gz -C /tmp/jpnote-install --strip-components=1
+tar -xzf jpnote-v0.7.2.tar.gz -C /tmp/jpnote-install --strip-components=1
 /tmp/jpnote-install/install.sh
 rehash
 jpnote --version
@@ -135,7 +135,40 @@ jpnote import FILE --keep-source
 
 非互動與 `--format json` 在未指定旗標時一律保留，避免 SSH／script 卡在提示。`--check`、`--dry-run`、取消、no-selection 或任何匯入失敗都不會刪檔。正式 apply 前會在 writer lock 內重新確認目前 DB 的 preflight；若確認後已有其他 writer 改變結果，會拒絕匯入並要求重跑。刪除前會驗證來源仍是同一 regular file；symlink、替換或內容修改會拒絕。DB 已成功但刪檔失敗、提示收到 EOF 或 Ctrl-C 時，只會保留來源，匯入仍維持成功。
 
-## 3.2 從 Wayland 剪貼簿或標準輸入匯入
+## 3.2 Windows PowerShell client
+
+repository 的 `clients\windows` 提供正式 Windows client。它需要既有 SSH host／alias（預設 `jpnote`）能連到已安裝 jpnote 0.7.2 以上的 Arch 主機。
+
+安裝會把版本化 module 同時放到 Windows PowerShell 5.1 與 PowerShell 7 的使用者模組路徑：
+
+```powershell
+.\clients\windows\Install-JpnoteWindowsClient.ps1
+```
+
+預檢與正式匯入：
+
+```powershell
+Test-JpnoteFile
+Import-JpnoteFile
+
+# 或直接指定檔案
+Test-JpnoteFile "$HOME\Downloads\jpnote.json"
+Import-JpnoteFile "$HOME\Downloads\jpnote.json"
+```
+
+`Import-JpnoteFile` 會先執行遠端完整預檢，顯示結果後要求輸入大寫 `IMPORT`。Windows client 將預檢回傳的 `preflight_token` 帶入正式匯入；若 JSON、normalized plan 或相關 DB outcome 已改變，Arch 會拒絕過期確認。仍有 review／conflict 時，Windows client 也會停止，不會自動加 `--accept-warnings`。
+
+Arch 回傳明確成功後，才詢問是否刪除 Windows 本機來源檔，預設 `[y/N]` 保留。亦可使用 `-DeleteSource`／`-KeepSource`。刪除前重新比對大小、建立／修改時間與 SHA-256；來源消失、被修改、替換或變成 reparse point 時只保留，不影響已成功的 DB transaction。
+
+傳輸使用 `jpnote import --stdin --protocol 1`，直接把 strict UTF-8 JSON bytes 寫入 SSH stdin；上限 16 MiB，不使用剪貼簿、Base64 或遠端 `/tmp` 檔案。
+
+移除目前版本：
+
+```powershell
+.\clients\windows\Uninstall-JpnoteWindowsClient.ps1
+```
+
+## 3.3 從 Wayland 剪貼簿或標準輸入匯入
 
 預設仍從 Wayland 剪貼簿讀取：
 
@@ -143,18 +176,18 @@ jpnote import FILE --keep-source
 jpnote paste
 ```
 
-需要 `wl-paste`。SSH、遠端 shell 或 pipe 情境可改從標準輸入讀取完整 JSON：
+需要 `wl-paste`。SSH、遠端 shell 或 pipe 情境優先使用正式 import stdin：
 
 ```bash
-cat import.json | jpnote paste --stdin --check
-cat import.json | jpnote paste --stdin --yes
+cat import.json | jpnote import --stdin --check
+cat import.json | jpnote import - --yes
 ```
 
-也可從另一台電腦直接把本機檔案送入遠端 jpnote：
+`jpnote paste --stdin` 保留相容性。需要自行建立 machine client 時，使用 versioned protocol，而不是解析人類可讀文字：
 
 ```bash
-ssh user@arch-desktop '~/.local/bin/jpnote paste --stdin --check --format json' < import.json
-ssh user@arch-desktop '~/.local/bin/jpnote paste --stdin --yes' < import.json
+jpnote import --stdin --check --yes --protocol 1 < import.json
+jpnote import --stdin --yes --protocol 1 --preflight-token TOKEN < import.json
 ```
 
 `--stdin` 不需要 `wl-paste`。它只改變文字輸入來源，之後仍和剪貼簿模式進入完全相同的 JSON 解析、schema 驗證、重複偵測、完整預檢、安全整理、確認、備份與正式匯入流程。
@@ -188,7 +221,7 @@ cat import.json | jpnote paste --stdin --yes
 
 `--yes` 只略過上述確認並同意安全整理，**不會跳過 validation 或 preflight**。attempt identity conflict、缺少 linked entries、pending relation note conflict 等 blocking 問題，即使加 `--yes` 仍會拒絕匯入。疑似不同 stable key 的 duplicate warning 仍需 `--map-key`、`--skip-item` 或明確 `--accept-warnings`。
 
-## 3.3 真正 read-only 預檢
+## 3.4 真正 read-only 預檢
 
 ```bash
 jpnote paste --check --all
@@ -223,7 +256,7 @@ jpnote paste --check --all --format json --copy-report
 jpnote paste --check --all --format json --output report.json
 ```
 
-## 3.3.1 v0.6.6.3 自動預檢與安全整理
+## 3.4.1 v0.6.6.3 自動預檢與安全整理
 
 正常正式匯入會顯示與 `--check --all` 相同的完整報告。可安全整理的範圍刻意保守，且只限本次選取項目與同 stable key 的直接相關資料：
 
@@ -245,7 +278,7 @@ jpnote import FILE --check --all
 
 這些命令只輸出報告，不顯示正式匯入確認，也不套用 safe fixes。
 
-## 3.3.2 v0.6.6.2 匯入正確性規則
+## 3.4.2 v0.6.6.2 匯入正確性規則
 
 在 v0.6.6.2 中，同一批匯入若出現相同 logical relation identity（`source + target + relation_type`）但不同非空 `note`，會直接拒絕；reciprocal／inverse 兩端若 note 互相矛盾也同樣拒絕，不再採最後一筆覆蓋。`--check` 會依同批 relation 的套用順序模擬狀態，因此同一 reciprocal relation 被兩端重複描述時，後一筆可正確判為 `unchanged`。
 
@@ -259,7 +292,7 @@ jpnote import FILE --check --all
 - 文法 relation 的 logical identity 是 `source_key + target_key + relation_type`；`note` 是 metadata。重新匯入同一 relation 的新 note 會更新舊 note，不會再累積另一列。
 - `--check` 會顯示 relation 的 new/update/unchanged outcome，和正式匯入採用同一套判定。
 
-## 3.4 選擇部分資料
+## 3.5 選擇部分資料
 
 ```bash
 jpnote import FILE --item-key 'vocab:猫'
@@ -268,7 +301,7 @@ jpnote import FILE --attempt-index 0
 
 可重複指定。
 
-## 3.5 key 映射與跳過
+## 3.6 key 映射與跳過
 
 ```bash
 jpnote import FILE --map-key 'vocab:噛む=vocab:かむ'
@@ -277,7 +310,7 @@ jpnote import FILE --skip-item 'vocab:噛む'
 
 `--map-key` 表示本次資料沿用另一個既有 stable key；`--skip-item` 只跳過本批指定項目。
 
-## 3.6 duplicate warning
+## 3.7 duplicate warning
 
 正式非互動匯入遇到疑似重複時，需：
 
@@ -289,7 +322,7 @@ jpnote import FILE --skip-item 'vocab:噛む'
 jpnote import FILE --accept-warnings
 ```
 
-## 3.7 dry-run
+## 3.8 dry-run
 
 ```bash
 jpnote import FILE --dry-run --format json
@@ -297,7 +330,7 @@ jpnote import FILE --dry-run --format json
 
 只輸出正規化後的匯入計畫；不寫入資料。
 
-## 3.8 匯入 outcome
+## 3.9 匯入 outcome
 
 項目可能為：
 
@@ -870,10 +903,12 @@ jpnote config path
 jpnote config edit
 jpnote config reset
 
-jpnote import FILE [--all] [--item-key KEY ...] [--attempt-index N ...]
+jpnote import [FILE|-|--stdin] [--protocol 1] [--preflight-token TOKEN]
+                   [--all] [--item-key KEY ...] [--attempt-index N ...]
                    [--map-key SOURCE=TARGET ...] [--skip-item KEY ...]
                    [--accept-warnings] [--yes] [--dry-run] [--check]
                    [--copy-report] [--output FILE] [--format text|json]
+                   [--delete-source|--keep-source]
 
 jpnote paste [與 import 相同選項]
 
@@ -1097,6 +1132,8 @@ undo
 ---
 
 # Part 14：版本變更
+
+v0.7.2 新增正式 stdin import protocol 與 repository-owned Windows PowerShell client；protocol preflight token 會拒絕過期確認。Core／Quiz／public import schema 均未變。
 
 v0.7.1 新增 multi-process writer／undo serialization，以及 import-first 的來源檔安全清理流程；成功後可互動選擇刪除，並提供 `--delete-source`／`--keep-source`。Core schema 維持 v5，Quiz schema 維持 v2，public import JSON schema 不變。
 

@@ -14,8 +14,8 @@
 
 ## 目前基準
 
-- 正式 release/tag：`jpnote v0.7.1`；annotated tag 必須指向本文件所在 release commit
-- 正式安裝版本：`jpnote 0.7.1`
+- 正式 release/tag：`jpnote v0.7.2`；annotated tag 必須指向本文件所在 release commit
+- 正式安裝版本：`jpnote 0.7.2`
 - core SQLite schema：v5
 - Quiz SQLite：獨立 `quiz.db`，schema v2
 - stability gate：通過
@@ -26,6 +26,9 @@
 - post-release commits：`a660950`（是非題回饋標籤）、`74fb82a`（`paste --stdin`）
 - `paste --stdin` targeted regression：`13 passed`；temporary-data installed smoke：PASS
 - post-release maintenance：installed fzf helper isolated bootstrap、Quiz 準備畫面 refresh、session question batch insert
+- v0.7.2 completed：`import --stdin`／`-`、`jpnote.import.v1` ASCII-safe protocol、preflight token、repository-owned Windows PowerShell 5.1／7 client
+- v0.7.2 release gate：Arch `421 passed, 18 subtests passed`；versioned isolated install／正式安裝／DB hash-read-only smoke PASS；Windows PowerShell 5.1＋SSH 實機匯入與後續兩日使用 PASS
+- 正常驗證分工：能在開發環境完成的測試不得轉交使用者；使用者只做完整實際 repository gate、Windows＋SSH 實機 gate與 final release gate
 
 啟動新工作階段先確認基線：
 
@@ -34,7 +37,7 @@ git status
 git fetch --tags origin
 git rev-parse --short HEAD
 git rev-parse --short origin/main
-git rev-parse --short 'v0.7.0^{}'
+git rev-parse --short 'v0.7.2^{}'
 jpnote --version
 ```
 
@@ -77,19 +80,24 @@ jpnote --version
 - Quiz 開始 session 前先 refresh「正在準備題目……」，同步建題期間不再只有靜止設定畫面。
 - Quiz session 初始題目列改用同一 transaction 內 batch insert；無 schema 變更。
 
+## v0.7.2 released design
+
+- Windows client 是 repository 正式功能，位於 `clients/windows/`，不是 profile-only workaround。
+- Windows client 的 precheck 使用 `--check --yes --protocol 1`，取得完成 safe-fix 模擬後的 `preflight_token`；apply 必須帶同一 token。
+- protocol apply 仍在 writer lock 內重建 DB-dependent preflight；任一層漂移都拒絕。
+- client 不解析 human-readable output、不使用 Base64／remote temp、不自動接受 duplicate warnings。
+- client source delete 是 post-commit、fail-soft；只刪除大小／時間／SHA-256 均未變且不是 reparse point 的同一路徑。
+- PowerShell 5.1＋真實 SSH／passphrase／檔案匯入已在 Windows 筆電完成端到端驗證，後續兩日實際使用正常。
+
 ## 下一個正確工作項目
 
-v0.7.1 release gate 已完成。下一個正式工作項目：
+v0.7.2 release gate 已完成。下一階段依序處理：
 
-1. 是非題顯示改為 `○／×`，同步 question/feedback/history。
-2. `reorder_4` 顯示完整句子並高亮重組片段，提供無色 fallback。
-3. TUI history export/delete 入口與刪除確認。
-4. TUI 錯誤訊息／空狀態 polish。
-5. release artifact 自動化與 install/release script 整合。
-6. 單字漢字洩題改善；假名 prompt 必須排除所有同讀音詞條的意思，確保唯一答案。
-7. fuzzy candidates、AI context、grammar combinations、romaji／語源、fzf／未分類／mistake level。
-8. identity index；multi-writer 第一階段已進入 0.7.1 active gate。
-9. 低優先：負分制、timing、streak、familiarity、spaced repetition、radar／trends。
+1. 做一次有邊界的安全／穩定性 gate：安裝回退、read-only side effects、CI／版本相容、backup/undo/Quiz DB 權限與已知高風險 failure paths；通過後不要無限重跑同規模健檢。
+2. 匯入預檢更新明細：任何 preflight（本機 `import --check`、一般 `import` 內建 check、Windows `Test-JpnoteFile`／`Import-JpnoteFile`）遇到同 stable key 更新／合併時，列出 type、display、stable key 與必要的主要欄位變更；Windows 只呈現 core/protocol 結果，不自行重算。
+3. Quiz 高優先 UI／正確性：題數可直接輸入、自訂 50 等數值；是非題改 `○／×`；`reorder_4` 完整句；漢字洩題與同音詞唯一答案保護。
+4. 手機 Quiz 架構 spike：手機 TUI／SSH 僅作備援，優先比較 Tailscale-only Web／PWA、受限 API、認證、session／斷線恢復與多裝置安全邊界，再決定正式實作。
+5. 其後處理 Quiz 啟動效能、動態 loading、grammar 詳細頁 hanging indent、history polish 與其他既有 backlog。
 
 不要因非 blocking finding 重啟同規模廣域健檢；優先依實際使用回饋做針對性修正。
 

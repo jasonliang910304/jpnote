@@ -1,9 +1,48 @@
 # jpnote 開發路線圖
 
-最後更新：2026-08-03（Asia/Taipei）
-正式 release/tag：v0.7.1；annotated tag 應指向本文件所在 release commit
-正式安裝版本：0.7.1
-目前開發位置：v0.7.1 release gate 完成；下一階段回到既有高優先 backlog
+最後更新：2026-08-08（Asia/Taipei）
+正式 release/tag：v0.7.2；annotated tag 應指向本文件所在 release commit
+正式安裝版本：0.7.2
+目前開發位置：v0.7.2 release gate 完成；下一階段先做 bounded safety/stability gate，再進近期 Quiz／mobile backlog
+
+## 0.7.2 高優先主軸 — completed
+
+### A. stable stdin import protocol
+
+- `jpnote import --stdin`／`jpnote import -` 共用既有 `_run_import_text()`；strict UTF-8、optional BOM、16 MiB 上限。
+- `jpnote.import.v1` envelope 對 success/error 都提供固定 protocol/version/jpnote_version/ok/mode/status；wire JSON 使用 ASCII escape，避開 Windows PowerShell 5.1 code-page 污染。
+- protocol check 回傳 `preflight_token`；Windows apply 帶回 token，並仍保留 writer lock 內的 DB preflight revalidation。
+- legacy `--format json` 保持原本未包 envelope 的輸出，避免破壞既有 script。
+
+### B. repository-owned Windows client
+
+- 版本化 PowerShell module manifest、Install／Uninstall、README 與 native tests。
+- PowerShell 5.1／7；同時安裝兩個使用者 module path，same-version reinstall 先備份且失敗可回復。
+- strict UTF-8／JSON、本機 16 MiB、reparse point、檔案替換／修改與 SHA-256 guards。
+- 原始 bytes 直接寫入 SSH stdin；不使用 clipboard、Base64 或遠端 temp file。
+- review/conflict fail closed；只在 protocol success 與 token match 後詢問 `[y/N]` 刪除本機來源。
+
+### C. test／release interaction budget
+
+- 可在開發環境完成的 targeted、protocol、temporary DB、patch apply 與 script rehearsal 不再交給使用者。
+- 使用者只跑一次完整 Arch repository gate、一次 Windows 5.1＋SSH 實機 gate、一次 final release gate。
+- release verification：targeted `20 passed`；完整 Arch `421 passed, 18 subtests passed`；Windows PowerShell 5.1＋SSH 實機 gate 與後續兩日使用 PASS。
+
+
+### D. Release completion
+
+- versioned isolated install／stdin protocol smoke：PASS。
+- 正式安裝 `jpnote 0.7.2`，正式 DB 安裝前後 SHA-256 相同；當次 read-only copy smoke 為 486 items／27 attempts、critical 0／needs_input 0。
+- Windows PowerShell 5.1＋SSH real check/import/source cleanup：PASS，後續兩日實際使用正常。
+- core schema v5、Quiz schema v2、public import JSON schema 均不變。
+
+## Post-v0.7.2 next priorities
+
+1. bounded safety/stability gate：installer rollback、read-only side effects、CI／版本相容、backup/undo/Quiz DB 權限與高風險 failure paths；通過後不無限重跑同規模 audit。
+2. 匯入預檢更新明細：所有 preflight 入口對同 stable key 更新／合併顯示 type、display、stable key 與必要主要變更；Windows 使用 core protocol 結果。
+3. Quiz 題數直接輸入／自訂值；再處理 `○／×`、`reorder_4` 完整句、漢字洩題＋同音詞唯一答案。
+4. 手機 Quiz 架構 spike：TUI/SSH 僅備援，優先評估 Tailscale-only Web／PWA、受限 API、認證、session／斷線恢復、多裝置安全邊界。
+5. Quiz 啟動效能／動態 loading、history polish、grammar 詳細頁 hanging indent 與其他既有 backlog。
 
 ## 0.7.1 高優先主軸 — completed
 

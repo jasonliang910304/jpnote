@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hmac
 import json
 import os
 import shlex
@@ -46,6 +47,11 @@ from .export_markdown import export_all
 from .fs_utils import atomic_write_text, ensure_private_dir
 from .import_resolution import resolve_import_plan
 from .import_source import ImportSource
+from .import_transport import (
+    import_preflight_token,
+    import_protocol_envelope,
+    read_import_stdin,
+)
 from .import_safe_fixes import apply_safe_import_fixes
 from .import_preflight import (
     blocking_preflight_messages,
@@ -94,6 +100,40 @@ from .writer_lock import writer_lock
 
 def _json(data: Any) -> None:
     print(json.dumps(data, ensure_ascii=False, indent=2))
+
+
+def _import_protocol_enabled(args: argparse.Namespace) -> bool:
+    return getattr(args, "protocol_version", None) is not None
+
+
+def _import_protocol_mode(args: argparse.Namespace) -> str:
+    if getattr(args, "check", False):
+        return "check"
+    if getattr(args, "dry_run", False):
+        return "dry_run"
+    return "import"
+
+
+def _emit_import_protocol(
+    args: argparse.Namespace,
+    *,
+    ok: bool,
+    **payload: Any,
+) -> None:
+    # Keep the wire protocol ASCII-only so Windows PowerShell 5.1 can parse it
+    # even when the surrounding console still uses a legacy code page.
+    print(
+        json.dumps(
+            import_protocol_envelope(
+                jpnote_version=VERSION,
+                ok=ok,
+                mode=_import_protocol_mode(args),
+                **payload,
+            ),
+            ensure_ascii=True,
+            indent=2,
+        )
+    )
 
 
 def _entry_label(entry: dict[str, Any]) -> str:
@@ -167,7 +207,10 @@ def _emit_preflight(report: dict[str, Any], args: argparse.Namespace) -> int:
         atomic_write_text(Path(args.output).expanduser(), rendered)
     if getattr(args, "copy_report", False):
         _write_clipboard(rendered)
-    sys.stdout.write(rendered)
+    if _import_protocol_enabled(args):
+        _emit_import_protocol(args, ok=True, preflight=report)
+    else:
+        sys.stdout.write(rendered)
     return 0
 
 
@@ -336,6 +379,11 @@ def _cleanup_import_source(source: ImportSource, args: argparse.Namespace) -> di
 
 
 def _print_apply_preflight(report: dict[str, Any], args: argparse.Namespace, *, heading: str = "") -> None:
+    # Machine clients already run an explicit protocol check and only need one
+    # bounded JSON envelope from the apply call.  Suppressing the full report
+    # here avoids duplicating potentially large payload diagnostics over SSH.
+    if _import_protocol_enabled(args):
+        return
     output = sys.stderr if args.format == "json" else sys.stdout
     if heading and args.format != "json":
         print(heading, file=output)
@@ -444,14 +492,47 @@ def _run_import_text(
     if args.check:
         with connect_preflight() as conn:
             report = build_preflight_report(conn, selected)
+            if (
+                _import_protocol_enabled(args)
+                and args.yes
+                and report.get("safe_fixes")
+            ):
+                selected, _fix_actions = apply_safe_import_fixes(conn, selected)
+                report = build_preflight_report(conn, selected)
+        if _import_protocol_enabled(args):
+            token = import_preflight_token(selected, report)
+            rendered = render_preflight_json(report)
+            if getattr(args, "output", None):
+                atomic_write_text(Path(args.output).expanduser(), rendered)
+            if getattr(args, "copy_report", False):
+                _write_clipboard(rendered)
+            _emit_import_protocol(
+                args,
+                ok=True,
+                preflight=report,
+                preflight_token=token,
+            )
+            return 0
         return _emit_preflight(report, args)
 
     if args.dry_run:
-        _json(selected.to_dict()) if args.format == "json" else _print_import_warnings(selected)
+        if _import_protocol_enabled(args):
+            _emit_import_protocol(args, ok=True, plan=selected.to_dict())
+        elif args.format == "json":
+            _json(selected.to_dict())
+        else:
+            _print_import_warnings(selected)
         return 0
 
     if not selected.items and not selected.attempts:
-        if args.format == "json":
+        if _import_protocol_enabled(args):
+            _emit_import_protocol(
+                args,
+                ok=True,
+                outcome="no_selection",
+                modified=False,
+            )
+        elif args.format == "json":
             _json({"result": "no_selection", "modified": False})
         else:
             print("沒有選取任何資料，未修改資料庫。")
@@ -522,6 +603,14 @@ def _run_import_text(
                     print(f"已再套用 {len(fix_actions)} 組安全整理；尚未修改資料庫。")
                 _print_apply_preflight(report, args, heading="=== 最終安全整理後預檢 ===")
 
+    approved_token = getattr(args, "preflight_token", None)
+    current_token = import_preflight_token(selected, report)
+    if approved_token and not hmac.compare_digest(approved_token, current_token):
+        raise RuntimeError(
+            "匯入內容或資料庫狀態已和 Windows 預檢不同；"
+            "為避免套用過期確認，請重新預檢。"
+        )
+
     blocking = blocking_preflight_messages(report)
     if blocking:
         raise RuntimeError(
@@ -549,11 +638,16 @@ def _run_import_text(
         cleanup = _cleanup_import_source(source, args) if source is not None else None
         output: dict[str, Any] = {
             "result": result.to_dict(),
+            "modified": modified,
             "backup": str(backup) if backup else "",
+            "preflight_token": current_token,
         }
         if cleanup is not None:
             output["source_cleanup"] = cleanup
-        _json(output)
+        if _import_protocol_enabled(args):
+            _emit_import_protocol(args, ok=True, **output)
+        else:
+            _json(output)
     else:
         print(
             "匯入完成：新增 {added_entries}、更新 {updated_entries}、未變更 {unchanged_entries} 個項目；"
@@ -685,7 +779,24 @@ def command_quiz(args: argparse.Namespace) -> int:
 
 
 def command_import(args: argparse.Namespace) -> int:
-    source = ImportSource.read(args.file)
+    file_value = getattr(args, "file", None)
+    stdin_requested = bool(getattr(args, "stdin", False)) or file_value == "-"
+
+    if getattr(args, "stdin", False) and file_value not in {None, "-"}:
+        raise ValueError("--stdin 與來源檔路徑不可同時使用。")
+
+    if stdin_requested:
+        if getattr(args, "delete_source", False) or getattr(args, "keep_source", False):
+            raise ValueError(
+                "標準輸入沒有可由遠端 jpnote 刪除的來源檔；"
+                "請由傳送端在確認 protocol success 後處理本機檔案。"
+            )
+        return _run_import_text(read_import_stdin(), args)
+
+    if not file_value:
+        raise ValueError("請指定 JSON 檔案、'-'，或使用 --stdin。")
+
+    source = ImportSource.read(file_value)
     return _run_import_text(source.text, args, source=source)
 
 
@@ -1600,8 +1711,27 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.set_defaults(transparent_background=None, func=command_quiz)
 
-    p = sub.add_parser("import", help="從 JSON 檔案匯入")
-    p.add_argument("file")
+    p = sub.add_parser("import", help="從 JSON 檔案或 UTF-8 標準輸入匯入")
+    p.add_argument(
+        "file",
+        nargs="?",
+        help="JSON 檔案；使用 '-' 可從標準輸入讀取",
+    )
+    p.add_argument(
+        "--stdin",
+        action="store_true",
+        help="從標準輸入讀取完整 UTF-8 JSON；等同來源 '-'",
+    )
+    p.add_argument(
+        "--protocol",
+        dest="protocol_version",
+        choices=("1",),
+        help="輸出穩定的 jpnote.import.v1 JSON envelope；目前僅支援 1",
+    )
+    p.add_argument(
+        "--preflight-token",
+        help="要求正式匯入與先前 protocol check 的 normalized plan 完全一致",
+    )
     _add_import_options(p)
     source_cleanup = p.add_mutually_exclusive_group()
     source_cleanup.add_argument(
@@ -1789,8 +1919,28 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _protocol_error_type(exc: BaseException) -> str:
+    if isinstance(exc, json.JSONDecodeError):
+        return "invalid_json"
+    if isinstance(exc, ValueError):
+        return "invalid_input"
+    if isinstance(exc, sqlite3.Error):
+        return "database_error"
+    if isinstance(exc, OSError):
+        return "io_error"
+    return "runtime_error"
+
+
+def _protocol_error_message(exc: BaseException) -> str:
+    if isinstance(exc, json.JSONDecodeError):
+        return f"JSON 第 {exc.lineno} 行、第 {exc.colno} 欄格式錯誤。"
+    return str(exc)
+
+
 def main() -> int:
     args = build_parser().parse_args()
+    if _import_protocol_enabled(args):
+        args.format = "json"
     try:
         configure_color(
             args.color,
@@ -1798,9 +1948,21 @@ def main() -> int:
             stream=sys.stdout,
         )
         return int(args.func(args))
-    except json.JSONDecodeError as exc:
-        print(f"錯誤：JSON 第 {exc.lineno} 行、第 {exc.colno} 欄格式錯誤。", file=sys.stderr)
-        return 1
-    except (ValueError, RuntimeError, OSError, sqlite3.Error) as exc:
-        print(f"錯誤：{exc}", file=sys.stderr)
+    except (json.JSONDecodeError, ValueError, RuntimeError, OSError, sqlite3.Error) as exc:
+        if _import_protocol_enabled(args):
+            _emit_import_protocol(
+                args,
+                ok=False,
+                error={
+                    "type": _protocol_error_type(exc),
+                    "message": _protocol_error_message(exc),
+                },
+            )
+        elif isinstance(exc, json.JSONDecodeError):
+            print(
+                f"錯誤：JSON 第 {exc.lineno} 行、第 {exc.colno} 欄格式錯誤。",
+                file=sys.stderr,
+            )
+        else:
+            print(f"錯誤：{exc}", file=sys.stderr)
         return 1

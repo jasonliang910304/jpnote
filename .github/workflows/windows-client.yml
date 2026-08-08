@@ -1,0 +1,59 @@
+name: Windows import client
+
+on:
+  push:
+    paths:
+      - 'clients/windows/**'
+      - 'jpnote_app/cli.py'
+      - 'jpnote_app/import_source.py'
+      - 'jpnote_app/import_transport.py'
+      - 'tests/test_v072_import_protocol.py'
+      - 'tests/test_v072_windows_client_contract.py'
+      - '.github/workflows/windows-client.yml'
+  pull_request:
+    paths:
+      - 'clients/windows/**'
+      - 'jpnote_app/cli.py'
+      - 'jpnote_app/import_source.py'
+      - 'jpnote_app/import_transport.py'
+      - 'tests/test_v072_import_protocol.py'
+      - 'tests/test_v072_windows_client_contract.py'
+      - '.github/workflows/windows-client.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  protocol:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - run: python -m pip install pytest
+      - run: >-
+          python -m pytest -q
+          tests/test_v072_import_protocol.py
+          tests/test_v072_windows_client_contract.py
+
+  powershell:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shell: [powershell, pwsh]
+    steps:
+      - uses: actions/checkout@v6
+      - name: Native module contract
+        shell: ${{ matrix.shell }}
+        run: .\clients\windows\tests\Test-JpnoteWindowsClient.ps1
+      - name: Install, reinstall, and uninstall
+        shell: ${{ matrix.shell }}
+        run: |
+          .\clients\windows\Install-JpnoteWindowsClient.ps1 -CurrentShellOnly
+          .\clients\windows\Install-JpnoteWindowsClient.ps1 -CurrentShellOnly
+          $module = Get-Module JpnoteFileImport -ListAvailable |
+            Where-Object Version -eq '0.7.2'
+          if ($null -eq $module) { throw 'installed module not found' }
+          .\clients\windows\Uninstall-JpnoteWindowsClient.ps1 -CurrentShellOnly
