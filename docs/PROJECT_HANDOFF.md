@@ -1,9 +1,9 @@
 # jpnote 專案交接紀錄
 
 最後更新：2026-08-08（Asia/Taipei）
-正式 release/tag：`jpnote v0.7.2`；annotated tag 應指向本文件所在 release commit
+正式 release/tag：`jpnote v0.7.2`；annotated tag 固定指向 release commit `46644a1ea329d15c85f35b897485763278aa0787`
 正式安裝版本：`jpnote 0.7.2`
-目前開發 checkpoint：v0.7.2 已發布；main 另含 post-release Windows CI workflow maintenance，release tag 維持指向 46644a1
+目前開發 checkpoint：v0.7.2 已發布；post-release Windows CI maintenance 已完成並全綠，release tag 維持指向 `46644a1`；下一步是 bounded safety/stability gate
 
 用途：讓新的 ChatGPT 對話或新的開發工作階段，不依賴舊聊天內容也能直接接續工作。
 
@@ -16,7 +16,8 @@
 ```text
 branch=main
 v0.7.2^{}=46644a1ea329d15c85f35b897485763278aa0787
-HEAD=origin/main=<post-release Windows CI maintenance commit>
+post-release CI code checkpoint=28ba7efb68aede3ed6e27fa51bfe34431b4e708c
+current main=以上 checkpoint ＋本次 handoff-only documentation sync
 working tree=clean
 ```
 
@@ -30,10 +31,10 @@ working tree=clean
 - core 新增 `jpnote import --stdin`／`jpnote import -`、16 MiB bounded strict UTF-8 transport 與 `jpnote.import.v1` JSON protocol。
 - protocol check 以 SHA-256 `preflight_token` 綁定 normalized plan 與相關 DB outcome；正式 apply 前若 token 或 writer-lock 內重建結果不同便 fail closed。
 - Windows module 支援 PowerShell 5.1／7、OpenFileDialog、SSH stdin、遠端 protocol validation、review/conflict fail closed，以及匯入成功後的本機來源安全刪除。
-- module／installer／uninstaller 位於 `clients/windows/`；GitHub Actions 會在 Windows runner 同時跑 Python protocol、Windows PowerShell 5.1、PowerShell 7，以及 install/reinstall/uninstall。
+- module／installer／uninstaller 位於 `clients/windows/`；GitHub Actions 的 core/import protocol tests 跑 `ubuntu-latest`，Windows PowerShell 5.1／PowerShell 7 client 與 install/reinstall/uninstall tests 跑 Windows runner。
 - 不使用剪貼簿、Base64 或遠端暫存檔；core schema v5、Quiz schema v2、public import JSON schema 均不變。
 - 新功能 targeted：`20 passed`；完整 Arch regression：`421 passed, 18 subtests passed`；versioned isolated install 與正式 install/DB hash/read-only smoke PASS；Windows PowerShell 5.1＋SSH 實機匯入及後續兩日使用 PASS。
-- release push 後首次 GitHub Windows workflow 在 job 啟動前因 `steps[*].shell` 不支援 `matrix` context 而 validation failure；post-release maintenance 改為明確分離 Windows PowerShell 5.1／PowerShell 7 jobs。這是 CI 定義錯誤，不是已通過實機測試的 client regression。
+- release push 後 CI maintenance 已完成：`694b869` 將 PowerShell 5.1／7 拆成明確 jobs；`e0095ba` 同步舊 matrix contract test；`28ba7ef` 將依賴 POSIX `fcntl` 的 core/import protocol job 移到 Ubuntu。最終 `protocol`、Windows PowerShell 5.1、PowerShell 7 三個 jobs 全部 PASS；這些皆為 release 後 CI-only maintenance，`v0.7.2` tag 未移動。
 
 ### 0.7.1 completed release scope
 
@@ -226,7 +227,7 @@ jpnote browse
 
 完整順序以第 3 節為準；摘要如下：
 
-- 已完成 maintenance：installed fzf helper path isolation、Quiz 開始前準備畫面與 batch session insert。
+- 已完成 maintenance：installed fzf helper path isolation、Quiz 開始前準備畫面與 batch session insert；v0.7.2 post-release CI 三個 jobs 已全綠。
 - 高優先：是非題 `○／×`、重組完整句子／高亮、history export/delete、TUI polish、release/install 自動化。
 - 一般優先：單字漢字洩題與同音詞唯一答案、fuzzy candidate、AI context、grammar combinations、romaji／語源、fzf／未分類／mistake level、多 writer／identity index。
 - 低優先：負分制、response timing、streak、familiarity、spaced repetition、radar chart／長期趨勢。

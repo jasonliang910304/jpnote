@@ -14,7 +14,7 @@
 
 ## 目前基準
 
-- 正式 release/tag：`jpnote v0.7.2`；annotated tag 必須指向本文件所在 release commit
+- 正式 release/tag：`jpnote v0.7.2`；annotated tag 固定指向 `46644a1ea329d15c85f35b897485763278aa0787`，不可因 post-release maintenance 移動
 - 正式安裝版本：`jpnote 0.7.2`
 - core SQLite schema：v5
 - Quiz SQLite：獨立 `quiz.db`，schema v2
@@ -28,7 +28,7 @@
 - post-release maintenance：installed fzf helper isolated bootstrap、Quiz 準備畫面 refresh、session question batch insert
 - v0.7.2 completed：`import --stdin`／`-`、`jpnote.import.v1` ASCII-safe protocol、preflight token、repository-owned Windows PowerShell 5.1／7 client
 - v0.7.2 release gate：Arch `421 passed, 18 subtests passed`；versioned isolated install／正式安裝／DB hash-read-only smoke PASS；Windows PowerShell 5.1＋SSH 實機匯入與後續兩日使用 PASS
-- v0.7.2 release commit/tag：`46644a1ea329d15c85f35b897485763278aa0787`；release 後首次 Windows Actions workflow 因 `steps[*].shell` 誤用 `matrix` context 在 validation 階段失敗，main 的 post-release maintenance 將 PowerShell 5.1／7 拆成明確 jobs；release tag 不移動
+- v0.7.2 release commit/tag：`46644a1ea329d15c85f35b897485763278aa0787`。post-release CI maintenance：`694b869` 拆分 Windows PowerShell 5.1／7 jobs，`e0095ba` 同步 contract test，`28ba7ef` 將依賴 POSIX `fcntl` 的 protocol/core tests 移到 Ubuntu；最終 protocol、Windows PowerShell 5.1、PowerShell 7 三個 jobs 全 PASS；release tag 不移動
 - 正常驗證分工：能在開發環境完成的測試不得轉交使用者；使用者只做完整實際 repository gate、Windows＋SSH 實機 gate與 final release gate
 
 啟動新工作階段先確認基線：

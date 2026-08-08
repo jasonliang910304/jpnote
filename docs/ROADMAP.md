@@ -1,9 +1,9 @@
 # jpnote 開發路線圖
 
 最後更新：2026-08-08（Asia/Taipei）
-正式 release/tag：v0.7.2；annotated tag 應指向本文件所在 release commit
+正式 release/tag：v0.7.2；annotated tag 固定指向 release commit `46644a1ea329d15c85f35b897485763278aa0787`
 正式安裝版本：0.7.2
-目前開發位置：v0.7.2 已發布；先完成 release 後 Windows CI workflow maintenance，再進 bounded safety/stability gate 與近期 Quiz／mobile backlog
+目前開發位置：v0.7.2 已發布且 post-release CI maintenance 已全綠；下一步進 bounded safety/stability gate，再處理近期 import／Quiz／mobile backlog
 
 ## 0.7.2 高優先主軸 — completed
 
@@ -35,7 +35,7 @@
 - 正式安裝 `jpnote 0.7.2`，正式 DB 安裝前後 SHA-256 相同；當次 read-only copy smoke 為 486 items／27 attempts、critical 0／needs_input 0。
 - Windows PowerShell 5.1＋SSH real check/import/source cleanup：PASS，後續兩日實際使用正常。
 - core schema v5、Quiz schema v2、public import JSON schema 均不變。
-- release push 首次 Windows CI 因 workflow 使用 `shell: ${{ matrix.shell }}` 在 GitHub Actions validation 階段失敗；post-release maintenance 以獨立 PowerShell 5.1／7 jobs 修正，不修改 jpnote runtime。
+- post-release CI maintenance：`694b869` 拆分 PowerShell 5.1／7 jobs；`e0095ba` 同步 contract test；`28ba7ef` 將使用 POSIX `fcntl` 的 core/import protocol job 移到 Ubuntu。最終 protocol、Windows PowerShell 5.1、PowerShell 7 jobs 全部 PASS；不修改 runtime/schema，`v0.7.2` tag 維持在 `46644a1`。
 
 ## Post-v0.7.2 next priorities
 
