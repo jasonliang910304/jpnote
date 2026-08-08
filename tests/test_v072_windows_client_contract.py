@@ -64,9 +64,14 @@ def test_manifest_and_installer_are_versioned() -> None:
 
 def test_windows_ci_runs_both_powershell_generations() -> None:
     workflow = read(ROOT / ".github" / "workflows" / "windows-client.yml")
+    assert "powershell51:" in workflow
+    assert "name: Windows PowerShell 5.1" in workflow
+    assert "shell: powershell" in workflow
+    assert "powershell7:" in workflow
+    assert "name: PowerShell 7" in workflow
+    assert "shell: pwsh" in workflow
+    assert "matrix.shell" not in workflow
     assert "runs-on: windows-latest" in workflow
-    assert "matrix:" in workflow
-    assert "shell: [powershell, pwsh]" in workflow
     assert "actions/checkout@v6" in workflow
     assert "actions/setup-python@v6" in workflow
 
