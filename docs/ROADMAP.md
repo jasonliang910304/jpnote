@@ -3,7 +3,7 @@
 最後更新：2026-08-08（Asia/Taipei）
 正式 release/tag：v0.7.2；annotated tag 應指向本文件所在 release commit
 正式安裝版本：0.7.2
-目前開發位置：v0.7.2 release gate 完成；下一階段先做 bounded safety/stability gate，再進近期 Quiz／mobile backlog
+目前開發位置：v0.7.2 已發布；先完成 release 後 Windows CI workflow maintenance，再進 bounded safety/stability gate 與近期 Quiz／mobile backlog
 
 ## 0.7.2 高優先主軸 — completed
 
@@ -35,6 +35,7 @@
 - 正式安裝 `jpnote 0.7.2`，正式 DB 安裝前後 SHA-256 相同；當次 read-only copy smoke 為 486 items／27 attempts、critical 0／needs_input 0。
 - Windows PowerShell 5.1＋SSH real check/import/source cleanup：PASS，後續兩日實際使用正常。
 - core schema v5、Quiz schema v2、public import JSON schema 均不變。
+- release push 首次 Windows CI 因 workflow 使用 `shell: ${{ matrix.shell }}` 在 GitHub Actions validation 階段失敗；post-release maintenance 以獨立 PowerShell 5.1／7 jobs 修正，不修改 jpnote runtime。
 
 ## Post-v0.7.2 next priorities
 

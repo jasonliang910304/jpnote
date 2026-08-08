@@ -3,7 +3,7 @@
 最後更新：2026-08-08（Asia/Taipei）
 正式 release/tag：`jpnote v0.7.2`；annotated tag 應指向本文件所在 release commit
 正式安裝版本：`jpnote 0.7.2`
-目前開發 checkpoint：v0.7.2 release gate 完成；本文件所在 commit 為 release commit
+目前開發 checkpoint：v0.7.2 已發布；main 另含 post-release Windows CI workflow maintenance，release tag 維持指向 46644a1
 
 用途：讓新的 ChatGPT 對話或新的開發工作階段，不依賴舊聊天內容也能直接接續工作。
 
@@ -11,11 +11,12 @@
 
 ## 1. 目前可信基準
 
-### 2026-08-08 release baseline
+### 2026-08-08 release／maintenance baseline
 
 ```text
 branch=main
-HEAD=origin/main=v0.7.2^{}=<本文件所在 release commit>
+v0.7.2^{}=46644a1ea329d15c85f35b897485763278aa0787
+HEAD=origin/main=<post-release Windows CI maintenance commit>
 working tree=clean
 ```
 
@@ -32,6 +33,7 @@ working tree=clean
 - module／installer／uninstaller 位於 `clients/windows/`；GitHub Actions 會在 Windows runner 同時跑 Python protocol、Windows PowerShell 5.1、PowerShell 7，以及 install/reinstall/uninstall。
 - 不使用剪貼簿、Base64 或遠端暫存檔；core schema v5、Quiz schema v2、public import JSON schema 均不變。
 - 新功能 targeted：`20 passed`；完整 Arch regression：`421 passed, 18 subtests passed`；versioned isolated install 與正式 install/DB hash/read-only smoke PASS；Windows PowerShell 5.1＋SSH 實機匯入及後續兩日使用 PASS。
+- release push 後首次 GitHub Windows workflow 在 job 啟動前因 `steps[*].shell` 不支援 `matrix` context 而 validation failure；post-release maintenance 改為明確分離 Windows PowerShell 5.1／PowerShell 7 jobs。這是 CI 定義錯誤，不是已通過實機測試的 client regression。
 
 ### 0.7.1 completed release scope
 

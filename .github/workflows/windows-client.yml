@@ -37,19 +37,33 @@ jobs:
           tests/test_v072_import_protocol.py
           tests/test_v072_windows_client_contract.py
 
-  powershell:
+  powershell51:
+    name: Windows PowerShell 5.1
     runs-on: windows-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        shell: [powershell, pwsh]
     steps:
       - uses: actions/checkout@v6
       - name: Native module contract
-        shell: ${{ matrix.shell }}
+        shell: powershell
         run: .\clients\windows\tests\Test-JpnoteWindowsClient.ps1
       - name: Install, reinstall, and uninstall
-        shell: ${{ matrix.shell }}
+        shell: powershell
+        run: |
+          .\clients\windows\Install-JpnoteWindowsClient.ps1 -CurrentShellOnly
+          .\clients\windows\Install-JpnoteWindowsClient.ps1 -CurrentShellOnly
+          $module = Get-Module JpnoteFileImport -ListAvailable |
+            Where-Object Version -eq '0.7.2'
+          if ($null -eq $module) { throw 'installed module not found' }
+          .\clients\windows\Uninstall-JpnoteWindowsClient.ps1 -CurrentShellOnly
+  powershell7:
+    name: PowerShell 7
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Native module contract
+        shell: pwsh
+        run: .\clients\windows\tests\Test-JpnoteWindowsClient.ps1
+      - name: Install, reinstall, and uninstall
+        shell: pwsh
         run: |
           .\clients\windows\Install-JpnoteWindowsClient.ps1 -CurrentShellOnly
           .\clients\windows\Install-JpnoteWindowsClient.ps1 -CurrentShellOnly
