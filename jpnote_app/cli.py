@@ -34,10 +34,12 @@ from .preferences import (
 )
 from .db import (
     active_backups,
-    active_backup_bytes,
+    active_backups_readonly,
+    active_backup_bytes_readonly,
     backup_integrity_ok,
     connect,
     connect_preflight,
+    connect_readonly,
     create_backup,
     create_recovery_snapshot,
     move_used_backup,
@@ -153,7 +155,7 @@ def _print_attempt(attempt: dict[str, Any], include_event_key: bool = False) -> 
 
 
 def _resolve_entry_key(query: str | None, allow_fzf: bool = True) -> str | None:
-    with connect() as conn:
+    with connect_readonly() as conn:
         if query:
             exact = find_exact_entry(conn, query)
             if exact is not None:
@@ -166,7 +168,7 @@ def _resolve_entry_key(query: str | None, allow_fzf: bool = True) -> str | None:
     if len(candidates) == 1:
         return candidates[0]["key"]
     if allow_fzf and ui_fzf.available() and sys.stdin.isatty():
-        with connect() as conn:
+        with connect_readonly() as conn:
             entry_map = get_entries_by_keys(conn, [entry["key"] for entry in candidates])
             full_candidates = [entry_map.get(entry["key"], entry) for entry in candidates]
         return ui_fzf.select_entry(full_candidates, "選擇項目")
@@ -256,7 +258,7 @@ def _print_duplicate_detail(plan: Any, warning: Any, *, file: Any = None) -> Non
     incoming = _plan_item(plan, warning.incoming_key)
     other = _plan_item(plan, warning.other_key)
     if other is None:
-        with connect() as conn:
+        with connect_readonly() as conn:
             other = get_entry(conn, warning.other_key, include_attempts=False)
     print("\n疑似重複：", file=output)
     if incoming:
@@ -309,7 +311,7 @@ def _interactive_resolve_warnings(plan: Any, *, file: Any = None) -> tuple[Any |
         if answer == "k":
             accepted_pairs.add(tuple(sorted((warning.incoming_key, warning.other_key))))
             continue
-        with connect() as conn:
+        with connect_readonly() as conn:
             if answer == "m":
                 current = resolve_import_plan(
                     conn,
@@ -806,10 +808,10 @@ def command_paste(args: argparse.Namespace) -> int:
 
 def command_list(args: argparse.Namespace) -> int:
     entry_type = "grammar" if args.kind == "grammar" else "vocabulary"
-    with connect() as conn:
+    with connect_readonly() as conn:
         entries = list_entries(conn, entry_type, args.level)
     if args.select:
-        with connect() as conn:
+        with connect_readonly() as conn:
             full_entries = [get_entry(conn, entry["key"]) or entry for entry in entries]
         key = ui_fzf.select_entry(full_entries, f"選擇{args.kind}")
         if key:
@@ -860,7 +862,7 @@ def command_browse(args: argparse.Namespace) -> int:
     )
 
     while True:
-        with connect() as conn:
+        with connect_readonly() as conn:
             records = browse_records(
                 conn,
                 types=tuple(filters["types"]),
@@ -918,7 +920,7 @@ def command_recent(args: argparse.Namespace) -> int:
         entry_type = "grammar"
     elif args.kind == "vocab":
         entry_type = "vocabulary"
-    with connect() as conn:
+    with connect_readonly() as conn:
         entries = list_recent_entries(conn, args.date, args.since, entry_type, args.source)
     if args.format == "json":
         _json(entries)
@@ -929,7 +931,7 @@ def command_recent(args: argparse.Namespace) -> int:
 
     use_fzf = not args.all and not args.no_fzf and ui_fzf.available() and sys.stdin.isatty()
     if use_fzf:
-        with connect() as conn:
+        with connect_readonly() as conn:
             entry_map = get_entries_by_keys(conn, [summary["key"] for summary in entries])
             enriched: list[dict[str, Any]] = []
             for summary in entries:
@@ -955,7 +957,7 @@ def command_recent(args: argparse.Namespace) -> int:
 
 
 def command_search(args: argparse.Namespace) -> int:
-    with connect() as conn:
+    with connect_readonly() as conn:
         summaries = search_entries(conn, args.query)
         entry_map = get_entries_by_keys(conn, [entry["key"] for entry in summaries])
         entries = [entry_map[entry["key"]] for entry in summaries if entry["key"] in entry_map]
@@ -997,7 +999,7 @@ def command_edit(args: argparse.Namespace) -> int:
     key = _resolve_entry_key(args.query)
     if not key:
         return 1
-    with connect() as conn:
+    with connect_readonly() as conn:
         entry = get_entry(conn, key)
     if not entry:
         return 1
@@ -1036,7 +1038,7 @@ def command_delete(args: argparse.Namespace) -> int:
     key = _resolve_entry_key(args.query)
     if not key:
         return 1
-    with connect() as conn:
+    with connect_readonly() as conn:
         entry = get_entry(conn, key, include_attempts=False)
     if not entry:
         return 1
@@ -1062,7 +1064,7 @@ def command_mistakes(args: argparse.Namespace) -> int:
         entry_key = _resolve_entry_key(args.entry, allow_fzf=False)
         if not entry_key:
             return 1
-    with connect() as conn:
+    with connect_readonly() as conn:
         attempts = list_attempts(conn, ["wrong", "partial"], entry_key, args.level)
     if args.format == "json":
         _json(attempts)
@@ -1075,7 +1077,7 @@ def command_mistakes(args: argparse.Namespace) -> int:
 
 
 def _resolve_attempt_event_key(query: str | None, allow_fzf: bool = True) -> str | None:
-    with connect() as conn:
+    with connect_readonly() as conn:
         if query:
             exact = get_attempt(conn, query)
             if exact is not None:
@@ -1110,7 +1112,7 @@ def command_attempts_list(args: argparse.Namespace) -> int:
         if not entry_key:
             return 1
     results = args.result or None
-    with connect() as conn:
+    with connect_readonly() as conn:
         attempts = list_attempts(conn, results, entry_key, args.level)
     if args.format == "json":
         _json(attempts)
@@ -1127,7 +1129,7 @@ def command_attempts_show(args: argparse.Namespace) -> int:
     if not event_key:
         print("找不到唯一作答紀錄。", file=sys.stderr)
         return 1
-    with connect() as conn:
+    with connect_readonly() as conn:
         attempt = get_attempt(conn, event_key)
     if attempt is None:
         return 1
@@ -1153,7 +1155,7 @@ def command_attempts_edit(args: argparse.Namespace) -> int:
     event_key = _resolve_attempt_event_key(args.query)
     if not event_key:
         return 1
-    with connect() as conn:
+    with connect_readonly() as conn:
         attempt = get_attempt(conn, event_key)
     if attempt is None:
         return 1
@@ -1194,7 +1196,7 @@ def command_attempts_edit(args: argparse.Namespace) -> int:
 
 def command_attempts_migrate_options(args: argparse.Namespace) -> int:
     """Preview or apply conservative legacy prompt/options cleanup."""
-    with connect() as conn:
+    with connect_readonly() as conn:
         candidates = safe_option_migration_candidates(conn)
     if not args.apply:
         if args.format == "json":
@@ -1211,7 +1213,7 @@ def command_attempts_migrate_options(args: argparse.Namespace) -> int:
         return 0
 
     if not candidates:
-        with connect() as conn:
+        with connect_readonly() as conn:
             unresolved = suspicious_option_migration_candidates(conn)
         if args.format == "json":
             _json({"migrated": 0, "items": [], "unresolved_suspicious": unresolved, "backup": ""})
@@ -1264,7 +1266,7 @@ def command_attempts_delete(args: argparse.Namespace) -> int:
     event_key = _resolve_attempt_event_key(args.query)
     if not event_key:
         return 1
-    with connect() as conn:
+    with connect_readonly() as conn:
         attempt = get_attempt(conn, event_key)
     if attempt is None:
         return 1
@@ -1295,7 +1297,7 @@ def command_attempts_delete(args: argparse.Namespace) -> int:
 
 
 def command_romaji_audit(args: argparse.Namespace) -> int:
-    with connect() as conn:
+    with connect_readonly() as conn:
         records = romaji_audit_records(conn)
     if not args.include_ok:
         records = [record for record in records if record["status"] != "ok"]
@@ -1323,7 +1325,7 @@ def command_romaji_audit(args: argparse.Namespace) -> int:
 
 
 def command_romaji_normalize(args: argparse.Namespace) -> int:
-    with connect() as conn:
+    with connect_readonly() as conn:
         candidates = safe_romaji_candidates(conn)
     if not args.apply:
         if args.format == "json":
@@ -1354,7 +1356,7 @@ def command_romaji_normalize(args: argparse.Namespace) -> int:
 
 
 def command_duplicates(args: argparse.Namespace) -> int:
-    with connect() as conn:
+    with connect_readonly() as conn:
         candidates = duplicate_candidates(conn)
     if args.format == "json":
         _json(candidates)
@@ -1385,7 +1387,7 @@ def command_merge(args: argparse.Namespace) -> int:
 
 
 def command_audit(args: argparse.Namespace) -> int:
-    with connect() as conn:
+    with connect_readonly() as conn:
         issues = run_audit(conn)
     if not args.include_info:
         issues = [issue for issue in issues if issue.severity != "info"]
@@ -1472,7 +1474,7 @@ def command_export(args: argparse.Namespace) -> int:
 
 
 def command_stats(args: argparse.Namespace) -> int:
-    with connect() as conn:
+    with connect_readonly() as conn:
         data = stats(conn)
     if args.format == "json":
         _json(data)
@@ -1503,11 +1505,11 @@ def command_backup(args: argparse.Namespace) -> int:
 
 
 def command_backups(_: argparse.Namespace) -> int:
-    backups = list(reversed(active_backups()))
+    backups = list(reversed(active_backups_readonly()))
     if not backups:
         print("目前沒有可供 undo 的備份。")
         return 0
-    total_mib = active_backup_bytes() / (1024 * 1024)
+    total_mib = active_backup_bytes_readonly(backups) / (1024 * 1024)
     cap_mib = BACKUP_MAX_BYTES / (1024 * 1024)
     print(f"可供 undo 的備份（總容量 {total_mib:.1f} / {cap_mib:.0f} MiB）：")
     for index, path in enumerate(backups, 1):

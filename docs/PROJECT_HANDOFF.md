@@ -1,9 +1,9 @@
 # jpnote 專案交接紀錄
 
-最後更新：2026-08-08（Asia/Taipei）
-正式 release/tag：`jpnote v0.7.2`；annotated tag 固定指向 release commit `46644a1ea329d15c85f35b897485763278aa0787`
-正式安裝版本：`jpnote 0.7.2`
-目前開發 checkpoint：v0.7.2 已發布；post-release Windows CI maintenance 已完成並全綠，release tag 維持指向 `46644a1`；下一步是 bounded safety/stability gate
+最後更新：2026-08-09（Asia/Taipei）
+正式 release/tag：`jpnote v0.7.3`；annotated tag `v0.7.3` 指向本文件所在 release commit
+正式安裝版本：`jpnote 0.7.3`
+目前開發 checkpoint：v0.7.3 Arch／Windows manual release gates 全部通過；release commit push 後必須等 Core regression 與 Windows import client CI 全綠，才發布 annotated `v0.7.3` tag
 
 用途：讓新的 ChatGPT 對話或新的開發工作階段，不依賴舊聊天內容也能直接接續工作。
 
@@ -50,9 +50,9 @@ working tree=clean
 ### 正式 release
 
 - branch：`main`
-- release tag：`v0.7.2`
+- release tag：`v0.7.3`
 - core SQLite schema：`5`
-- public import JSON schema：v0.7.1 相容，v0.7.2 未新增欄位
+- public import JSON schema：維持相容；v0.7.3 未新增欄位
 - v0.7.0 release gate：通過
 - post-release 功能 commit：`a660950`（是非題回饋標籤釐清）、`74fb82a`（`jpnote paste --stdin`）
 - 最新 maintenance checkpoint：installed fzf helper 以 isolated bootstrap 啟動；Quiz 開始前立即顯示準備畫面，session 題目寫入改用 batch insert。
@@ -155,6 +155,16 @@ Quiz history 不寫入既有教材 `attempts`。
 
 ## 3. 下一個正確工作項目
 
+### v0.7.3 stability + recent UX — release gate complete
+
+- parent baseline：`f429e39ef290247037ab5d1f99e7fdb6fc5d11a0`；core schema v5、Quiz schema v2、public import JSON schema 不變。
+- dev1 第一批只處理四個 safety foundation：revisioned/staged Linux installer＋rollback/path/concurrency guards、真正 read-only core DB path、explicit Quiz DB parent 權限、Linux core CI＋Python >= 3.10 gate。
+- read-only 範圍包含 list/browse/recent/search/stats/mistakes/attempt read/preview/audit/duplicates/romaji preview 與 backup listing；`init`、manual export、undo/mutation 仍走 writable connection。
+- installer v0.7.3 使用同版本 revisions＋atomic `current` activation；舊 revision 不在安裝成功後自動刪除，優先避免 rollback 資料誤刪。
+- GitHub core CI 預定在 Ubuntu 同時跑 Python 3.10／3.13 的 compileall、完整 pytest 與 isolated installer smoke；既有 Windows client CI 保留。
+- dev2 actual Arch gate 已通過：`455 passed, 18 subtests passed`；正式安裝已切到新的 0.7.3 revision，正式 DB hash／mtime／mode gate PASS。Windows PowerShell 5.1＋SSH 0.7.3 real gate 亦 PASS：install/reinstall、update-detail check、protocol、no-op import、來源刪除均通過。release tag 只在 push 後 Core／Windows CI 全綠時發布。
+- 詳細 audit／設計：`docs/audits/v0.7.3-stability-development.md`。
+
 ### v0.7.2 release completion
 
 - actual Arch repository gate：`421 passed, 18 subtests passed`。
@@ -166,13 +176,14 @@ Quiz history 不寫入既有教材 `attempts`。
 ### v0.7.2 後近期高優先／使用回饋
 
 1. 有邊界的安全／穩定性 gate：優先檢查 atomic revisioned installer／真正 rollback、read-only command side effects、CI／版本相容、backup/undo/Quiz DB 權限與已知高風險 failure paths；通過後停止同規模廣域健檢。
-2. 匯入預檢更新明細：只要 preflight 有同 stable key 更新／合併，摘要後逐筆列 type、display、stable key，必要時顯示主要欄位變更；適用本機 `--check`、一般 import 內建 check、Windows `Test-JpnoteFile` 與 `Import-JpnoteFile`。
-3. Quiz 題數支援直接輸入自訂數字，避免從預設 10 題反覆按到 50；需驗證正整數並清楚處理超過可用題數。
-4. Quiz 是非題 presentation 改為 `○／×`；底層 `true／false` ID 維持不變，並同步即時回饋與 history。
-5. `reorder_4` 回饋顯示包含固定題幹的完整句子；可重組片段使用 ANSI 高亮，並提供 `NO_COLOR` fallback。
-6. 單字意思題降低漢字洩題；假名 prompt 必須排除所有同讀音詞條的意思，確保唯一答案。
-7. 手機 Quiz 介面架構 spike：SSH/TUI 僅作臨時／備援，優先評估 Tailscale-only Web／PWA、受限 API、認證、session／斷線恢復與多裝置安全邊界。
-8. Quiz 啟動效能／動態 loading、TUI history polish 與 grammar 詳細頁 hanging indent。
+2. 匯入預檢更新明細：dev2 已實作。core preflight report 提供 `updates[]` 與 field-level `changes[]`；本機 `--check`／一般 import 內建 check 與 Windows `Test-JpnoteFile`／`Import-JpnoteFile` 共用同一 report，Windows 只呈現 core 回傳的變更文字。
+3. grammar romaji search：dev2 已實作；只從 grammar key/display/reading/aliases 的可靠 kana 片段衍生 search-only romaji token，不改 canonical/schema、不猜沒有讀音依據的漢字。
+4. Quiz 題數直接輸入：dev2 已實作。setup 題數列可直接鍵入 1–100（例如 50），Backspace 修正、Enter commit；0／超過上限 fail closed，題庫不足仍沿用既有 shortage confirmation。
+5. Quiz 是非題 presentation 改為 `○／×`；底層 `true／false` ID 維持不變，並同步即時回饋與 history。
+6. `reorder_4` 回饋顯示包含固定題幹的完整句子；可重組片段使用 ANSI 高亮，並提供 `NO_COLOR` fallback。
+7. 單字意思題降低漢字洩題；假名 prompt 必須排除所有同讀音詞條的意思，確保唯一答案。
+8. 手機 Quiz 介面架構 spike：SSH/TUI 僅作臨時／備援，優先評估 Tailscale-only Web／PWA、受限 API、認證、session／斷線恢復與多裝置安全邊界。
+9. Quiz 啟動效能／動態 loading、TUI history polish 與 grammar 詳細頁 hanging indent。
 
 ### 一般優先
 
@@ -236,6 +247,8 @@ jpnote browse
 ---
 
 ## 6. 每個 checkpoint 與 release 的紀錄規則
+
+每次開發的固定 hygiene：成功 gate／release 後，清理已失去用途的 patch、validation script、SHA sidecar、obsolete snapshot、stale temp dir 與已被成功結果取代的失敗 log；保留當前成功 validation log、正式 DB safety backup、active rollback artifact／release bundle。若 gate 失敗，先保留診斷所需檔案，修正後成功才清。
 
 每個會改變「目前完成範圍、下一步、schema、測試基線或重要規格」的開發 checkpoint，至少同步更新：
 

@@ -17,6 +17,7 @@ from .repository import get_entry
 from .import_outcomes import classify_attempt_outcome, classify_entry_outcome
 from .relation_integrity import reciprocal_type
 from .import_safe_fixes import safe_import_fix_candidates
+from .data_quality import clean_aliases
 
 
 def _entry_brief(entry: dict[str, Any] | None) -> dict[str, Any]:
@@ -38,6 +39,187 @@ def _entry_brief(entry: dict[str, Any] | None) -> dict[str, Any]:
     }
 
 
+_SCALAR_UPDATE_FIELDS = (
+    "type", "display", "reading", "romaji", "accent", "accent_type",
+    "accent_display", "accent_note", "level", "review_group", "origin_type",
+    "origin_language", "origin_word", "origin_note",
+)
+_OPTIONAL_UPDATE_FIELDS = set(_SCALAR_UPDATE_FIELDS) - {"type"}
+
+
+def _change_text(change: dict[str, Any]) -> str:
+    field = str(change.get("field") or "")
+    kind = str(change.get("kind") or "")
+    if kind == "replace":
+        before = str(change.get("before") or "∅")
+        after = str(change.get("after") or "∅")
+        return f"{field}：{before} → {after}"
+    if kind == "merge":
+        parts: list[str] = []
+        added = change.get("added") or []
+        removed = change.get("removed") or []
+        if added:
+            parts.append("新增 " + "、".join(str(value) for value in added))
+        if removed:
+            parts.append("移除 " + "、".join(str(value) for value in removed))
+        return f"{field}：" + "；".join(parts)
+    if kind == "normalize":
+        return str(change.get("text") or "metadata：依目前匯入規則正規化")
+    if kind == "relation":
+        status = str(change.get("status") or "update")
+        target = str(change.get("target_key") or "")
+        relation = str(change.get("relation") or "")
+        note = str(change.get("note") or "")
+        label = "新增" if status == "new" else "更新"
+        detail = f"{target}（{relation}）"
+        if note:
+            detail += f"：{note}"
+        return f"related_grammar：{label} {detail}"
+    return field or "內容變更"
+
+
+def _format_sense(sense: dict[str, Any]) -> str:
+    meaning = str(sense.get("meaning") or "")
+    example_ja = str(sense.get("example_ja") or "")
+    example_zh = str(sense.get("example_zh") or "")
+    if example_ja or example_zh:
+        example = " / ".join(value for value in (example_ja, example_zh) if value)
+        return f"{meaning}（{example}）" if meaning else example
+    return meaning
+
+
+def _entry_update_changes(
+    item: dict[str, Any],
+    existing: dict[str, Any] | None,
+    default_source: str,
+    relation_outcomes: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Describe the exact merge/update semantics already used by apply_import.
+
+    The report is presentation metadata only. It must not invent replacement
+    semantics for blank optional fields or destructive sense/source updates
+    that the real importer does not perform.
+    """
+    if not existing:
+        return []
+
+    changes: list[dict[str, Any]] = []
+    for field in _SCALAR_UPDATE_FIELDS:
+        before = str(existing.get(field) or "")
+        incoming = str(item.get(field) or "")
+        after = before if field in _OPTIONAL_UPDATE_FIELDS and not incoming else incoming
+        if after != before:
+            change = {
+                "field": field,
+                "kind": "replace",
+                "before": before,
+                "after": after,
+            }
+            change["text"] = _change_text(change)
+            changes.append(change)
+
+    existing_aliases = [str(value) for value in existing.get("aliases", [])]
+    merged_aliases = list(dict.fromkeys([*existing_aliases, *item.get("aliases", [])]))
+    if item.get("_clean_existing_aliases"):
+        merged_aliases = clean_aliases(
+            item["key"],
+            str(item.get("display") or existing.get("display") or ""),
+            str(item.get("reading") or existing.get("reading") or ""),
+            merged_aliases,
+        )
+    added_aliases = [value for value in merged_aliases if value not in existing_aliases]
+    removed_aliases = [value for value in existing_aliases if value not in merged_aliases]
+    if added_aliases or removed_aliases:
+        change = {
+            "field": "aliases",
+            "kind": "merge",
+            "added": added_aliases,
+            "removed": removed_aliases,
+        }
+        change["text"] = _change_text(change)
+        changes.append(change)
+
+    existing_senses = [
+        {
+            "meaning": str(sense.get("meaning") or ""),
+            "example_ja": str(sense.get("example_ja") or ""),
+            "example_zh": str(sense.get("example_zh") or ""),
+        }
+        for sense in existing.get("senses", [])
+    ]
+    existing_signatures = {
+        (sense["meaning"], sense["example_ja"], sense["example_zh"])
+        for sense in existing_senses
+    }
+    added_senses = [
+        {
+            "meaning": str(sense.get("meaning") or ""),
+            "example_ja": str(sense.get("example_ja") or ""),
+            "example_zh": str(sense.get("example_zh") or ""),
+        }
+        for sense in item.get("senses", [])
+        if (
+            str(sense.get("meaning") or ""),
+            str(sense.get("example_ja") or ""),
+            str(sense.get("example_zh") or ""),
+        ) not in existing_signatures
+    ]
+    removable_meanings = set(item.get("_remove_existing_blank_sense_meanings", []))
+    incoming_rich_meanings = {
+        str(sense.get("meaning") or "")
+        for sense in item.get("senses", [])
+        if str(sense.get("example_ja") or "") or str(sense.get("example_zh") or "")
+    }
+    existing_rich_meanings = {
+        sense["meaning"]
+        for sense in existing_senses
+        if sense["example_ja"] or sense["example_zh"]
+    }
+    removed_senses = [
+        sense
+        for sense in existing_senses
+        if sense["meaning"] in removable_meanings
+        and not sense["example_ja"]
+        and not sense["example_zh"]
+        and sense["meaning"] in (incoming_rich_meanings | existing_rich_meanings)
+    ]
+    if added_senses or removed_senses:
+        change = {
+            "field": "meanings/examples",
+            "kind": "merge",
+            "added": [_format_sense(sense) for sense in added_senses],
+            "removed": [_format_sense(sense) for sense in removed_senses],
+        }
+        change["text"] = _change_text(change)
+        changes.append(change)
+
+    source = str(item.get("source") or default_source or "")
+    existing_sources = [str(value) for value in existing.get("sources", [])]
+    if source and source not in existing_sources:
+        change = {
+            "field": "sources",
+            "kind": "merge",
+            "added": [source],
+            "removed": [],
+        }
+        change["text"] = _change_text(change)
+        changes.append(change)
+
+    for relation in relation_outcomes:
+        if relation.get("status") not in {"new", "update"}:
+            continue
+        change = {
+            "field": "related_grammar",
+            "kind": "relation",
+            "status": relation.get("status", "update"),
+            "target_key": relation.get("key", ""),
+            "relation": relation.get("relation", ""),
+            "note": relation.get("note", ""),
+        }
+        change["text"] = _change_text(change)
+        changes.append(change)
+
+    return changes
 
 
 def _relation_state(conn: sqlite3.Connection) -> tuple[
@@ -208,6 +390,15 @@ def build_preflight_report(conn: sqlite3.Connection, plan: ImportPlan) -> dict[s
             apply_status = "update"
         item_conflicts = warning_map.get(item["key"], [])
         status = "review" if item_conflicts else apply_status
+        changes = _entry_update_changes(
+            item, existing, plan.source, relation_outcomes
+        ) if apply_status == "update" and existing else []
+        if apply_status == "update" and existing and not changes:
+            changes = [{
+                "field": "metadata",
+                "kind": "normalize",
+                "text": "metadata：依目前匯入規則正規化（主要顯示內容不變）",
+            }]
         counts[status] += 1
         items.append({
             "status": status,
@@ -216,6 +407,7 @@ def build_preflight_report(conn: sqlite3.Connection, plan: ImportPlan) -> dict[s
             "relation_outcomes": relation_outcomes,
             "incoming": _entry_brief(item),
             "existing_same_key": _entry_brief(existing) if existing else None,
+            "changes": changes,
             "conflict_count": len(item_conflicts),
         })
 
@@ -269,6 +461,22 @@ def build_preflight_report(conn: sqlite3.Connection, plan: ImportPlan) -> dict[s
         })
 
     safe_fixes = safe_import_fix_candidates(conn, plan)
+    updates = [
+        {
+            "key": item["incoming"].get("key", ""),
+            "type": item["incoming"].get("type", ""),
+            "display": (
+                item["incoming"].get("display")
+                or (item.get("existing_same_key") or {}).get("display")
+                or item["incoming"].get("key", "")
+            ),
+            "changes": list(item.get("changes", [])),
+            "status": item.get("status", ""),
+        }
+        for item in items
+        if item.get("apply_outcome") == "update"
+        and item.get("existing_same_key")
+    ]
 
     return {
         "source": plan.source,
@@ -295,6 +503,7 @@ def build_preflight_report(conn: sqlite3.Connection, plan: ImportPlan) -> dict[s
         "notes": list(plan.notes),
         "safe_fixes": safe_fixes,
         "items": items,
+        "updates": updates,
         "conflicts": conflicts,
         "attempts": attempts,
         "database_modified": False,
@@ -375,12 +584,20 @@ def render_preflight_text(report: dict[str, Any]) -> str:
         lines.append("")
         lines.append("疑似衝突：無")
 
-    updates = [item for item in report["items"] if item["status"] == "update"]
+    updates = list(report.get("updates", []))
     if updates:
         lines.append("")
         lines.append(f"同 stable key，正式匯入時會更新／合併（{len(updates)}）")
         for item in updates:
-            lines.append("  - " + _brief_text(item["incoming"]).replace("\n    ", "\n    "))
+            label = "文法" if item.get("type") == "grammar" else "單字"
+            lines.append(
+                f"  - [{label}] {item.get('display') or item.get('key')} "
+                f"<{item.get('key', '')}>"
+            )
+            for change in item.get("changes", []):
+                text = str(change.get("text") or "").strip()
+                if text:
+                    lines.append(f"    · {text}")
 
     attempt_problems = [item for item in report["attempts"] if item["status"] != "new"]
     if attempt_problems:

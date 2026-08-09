@@ -294,9 +294,20 @@ def recover_orphaned_pending_backups(*, now_timestamp: float | None = None) -> l
     return recovered
 
 
+def active_backups_readonly() -> list[Path]:
+    """List active undo snapshots without creating/chmodding filesystem state."""
+    directory = backup_dir()
+    if not directory.is_dir():
+        return []
+    return sorted(
+        (path for path in directory.glob("undo-*.db") if path.is_file()),
+        key=lambda path: path.stat().st_mtime,
+    )
+
+
 def active_backups() -> list[Path]:
     ensure_directories()
-    paths = sorted(backup_dir().glob("undo-*.db"), key=lambda path: path.stat().st_mtime)
+    paths = active_backups_readonly()
     for path in paths:
         ensure_private_file(path)
     return paths
@@ -341,6 +352,11 @@ def prune_auxiliary_backups() -> None:
 
 def active_backup_bytes() -> int:
     return sum(path.stat().st_size for path in active_backups() if path.exists())
+
+
+def active_backup_bytes_readonly(paths: list[Path] | None = None) -> int:
+    snapshots = active_backups_readonly() if paths is None else paths
+    return sum(path.stat().st_size for path in snapshots if path.exists())
 
 
 def prune_backups() -> None:
@@ -505,18 +521,31 @@ def restore_database_from(backup_path: Path) -> None:
             temp_path.unlink(missing_ok=True)
 
 
+REQUIRED_SCHEMA_TABLES = {
+    "metadata",
+    "entries",
+    "senses",
+    "sources",
+    "attempts",
+    "attempt_entries",
+    "grammar_relations",
+    "pending_grammar_relations",
+}
+
+
 def _needs_migration_backup(conn: sqlite3.Connection) -> bool:
     tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-    if "entries" not in tables:
+    if not tables:
         return False
+    if any(table not in tables for table in REQUIRED_SCHEMA_TABLES):
+        return True
     columns = {row[1] for row in conn.execute("PRAGMA table_info(entries)")}
     if any(name not in columns for name in ENTRY_MIGRATION_COLUMNS):
         return True
-    if "attempts" in tables:
-        attempt_columns = {row[1] for row in conn.execute("PRAGMA table_info(attempts)")}
-        if any(name not in attempt_columns for name in ATTEMPT_MIGRATION_COLUMNS):
-            return True
-    return any(table not in tables for table in {"metadata", "attempts", "grammar_relations"})
+    attempt_columns = {row[1] for row in conn.execute("PRAGMA table_info(attempts)")}
+    if any(name not in attempt_columns for name in ATTEMPT_MIGRATION_COLUMNS):
+        return True
+    return False
 
 
 def _stored_schema_version(conn: sqlite3.Connection) -> int:
@@ -645,6 +674,48 @@ def connect_preflight() -> ManagedConnection:
         raise
     conn._jpnote_auto_close = True
     return conn
+
+
+def connect_readonly() -> ManagedConnection:
+    """Open a side-effect-free current-schema view for read commands.
+
+    A current on-disk database is opened directly with SQLite ``mode=ro``.
+    Missing or older schemas are copied/migrated only in memory through
+    ``connect_preflight``.  This path never creates/chmods directories, recovers
+    pending backups, prunes history, or migrates the real database.
+    """
+    path = db_path()
+    if not path.exists():
+        conn = connect_preflight()
+        conn.execute("PRAGMA query_only = ON")
+        return conn
+
+    conn = sqlite3.connect(
+        f"file:{path}?mode=ro",
+        uri=True,
+        factory=ManagedConnection,
+    )
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    try:
+        stored_version = _stored_schema_version(conn)
+        if stored_version > SCHEMA_VERSION:
+            raise RuntimeError(
+                f"資料庫 schema v{stored_version} 比目前 jpnote 支援的 v{SCHEMA_VERSION} 新；"
+                "請使用較新的 jpnote，避免舊版降級或破壞資料。"
+            )
+        if stored_version == SCHEMA_VERSION and not _needs_migration_backup(conn):
+            conn.execute("PRAGMA query_only = ON")
+            conn._jpnote_auto_close = True
+            return conn
+    except Exception:
+        conn.close()
+        raise
+
+    conn.close()
+    snapshot = connect_preflight()
+    snapshot.execute("PRAGMA query_only = ON")
+    return snapshot
 
 
 def connect() -> ManagedConnection:

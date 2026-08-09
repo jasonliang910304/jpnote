@@ -21,11 +21,11 @@ Write-Host '=== 安裝／更新 jpnote Windows client ==='
 & $Installer
 
 $InstalledModule = Get-Module JpnoteFileImport -ListAvailable |
-    Where-Object { $_.Version -eq [version]'0.7.2' } |
+    Where-Object { $_.Version -eq [version]'0.7.3' } |
     Sort-Object Version -Descending |
     Select-Object -First 1
 if ($null -eq $InstalledModule) {
-    throw '安裝後找不到 JpnoteFileImport 0.7.2。'
+    throw '安裝後找不到 JpnoteFileImport 0.7.3。'
 }
 Import-Module $InstalledModule.Path -Force -ErrorAction Stop
 

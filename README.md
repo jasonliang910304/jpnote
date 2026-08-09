@@ -1,10 +1,22 @@
-# jpnote v0.7.2
+# jpnote v0.7.3
 
 > **專案聲明**
 >
 > jpnote 的構想、功能需求、使用情境與開發方向由 **Jason Liang** 提供；本專案的所有程式碼均由 **OpenAI ChatGPT** 產生。Jason Liang 負責實際使用、測試、問題回報，以及功能與設計取捨。
 
 本版將原本 1,200 多行的單檔腳本拆成可重用的核心模組與可選介面層。
+
+## v0.7.3 Stability foundation 與 recent UX
+
+- Linux installer 改為 revisioned staged install＋atomic `current` activation，加入 installer lock、symlink/path guards 與 rollback；Python 最低版本明確為 3.10。
+- core read commands 使用真正 read-only SQLite path；舊／不完整 schema 僅在 memory snapshot migration，不因 browse/search/stats/audit 等讀取操作修改正式 DB。
+- Quiz explicit DB path 不再無條件 chmod 外部既有 parent；app-owned default directory 與 quiz.db 本身仍維持安全權限。
+- 新增 Linux core CI，Python 3.10／3.13 都跑 compileall、完整 pytest 與 isolated installer smoke。
+- import preflight 對同 stable key 更新提供 type／display／stable key 與 field-level changes；本機 check/import 與 Windows Test/Import 共用 core report/protocol。
+- grammar browse/search 支援由可靠假名衍生的 romaji query，例如 `imasu` → `いる／います`、`teiru` → `Vている`；不猜沒有 reading/alias 的漢字讀音。
+- Quiz setup 題數可直接鍵入 1–100，保留既有方向鍵與題庫不足確認。
+- actual Arch gate：`455 passed, 18 subtests passed`；Windows PowerShell 5.1＋SSH 0.7.3 install/reinstall、update-detail check、protocol、no-op import、來源刪除 real gate 全部 PASS。
+- core schema 維持 v5、Quiz schema 維持 v2；public import JSON schema 不變。
 
 ## v0.7.2 Cross-platform import protocol 與 Windows client
 
@@ -365,13 +377,13 @@ jpnote recent --format json           # 結構化輸出
 ## 安裝
 
 ```bash
-mkdir -p /tmp/jpnote-v0.7.2
+mkdir -p /tmp/jpnote-v0.7.3
 
-tar -xzf ~/Downloads/jpnote-v0.7.2.tar.gz \
-  -C /tmp/jpnote-v0.7.2 \
+tar -xzf ~/Downloads/jpnote-v0.7.3.tar.gz \
+  -C /tmp/jpnote-v0.7.3 \
   --strip-components=1
 
-/tmp/jpnote-v0.7.2/install.sh
+/tmp/jpnote-v0.7.3/install.sh
 jpnote init
 ```
 

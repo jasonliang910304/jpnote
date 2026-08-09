@@ -7,7 +7,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2.0
 
-$Version = '0.7.2'
+$Version = '0.7.3'
 $Documents = [Environment]::GetFolderPath('MyDocuments')
 $CurrentShellDirectory = if ($PSVersionTable.PSEdition -eq 'Core') {
     'PowerShell'

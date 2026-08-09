@@ -1,9 +1,9 @@
 # jpnote 開發路線圖
 
-最後更新：2026-08-08（Asia/Taipei）
-正式 release/tag：v0.7.2；annotated tag 固定指向 release commit `46644a1ea329d15c85f35b897485763278aa0787`
-正式安裝版本：0.7.2
-目前開發位置：v0.7.2 已發布且 post-release CI maintenance 已全綠；下一步進 bounded safety/stability gate，再處理近期 import／Quiz／mobile backlog
+最後更新：2026-08-09（Asia/Taipei）
+正式 release/tag：v0.7.3；annotated tag 只在 release commit 的 Core／Windows CI 全綠後發布
+正式安裝版本：0.7.3
+目前開發位置：v0.7.3 Arch／Windows manual release gates PASS；release commit push 後等待 Core regression＋Windows import client CI，全綠才發布 v0.7.3 tag
 
 ## 0.7.2 高優先主軸 — completed
 
@@ -37,13 +37,34 @@
 - core schema v5、Quiz schema v2、public import JSON schema 均不變。
 - post-release CI maintenance：`694b869` 拆分 PowerShell 5.1／7 jobs；`e0095ba` 同步 contract test；`28ba7ef` 將使用 POSIX `fcntl` 的 core/import protocol job 移到 Ubuntu。最終 protocol、Windows PowerShell 5.1、PowerShell 7 jobs 全部 PASS；不修改 runtime/schema，`v0.7.2` tag 維持在 `46644a1`。
 
-## Post-v0.7.2 next priorities
+## v0.7.3 — stability + recent small UX
 
-1. bounded safety/stability gate：installer rollback、read-only side effects、CI／版本相容、backup/undo/Quiz DB 權限與高風險 failure paths；通過後不無限重跑同規模 audit。
-2. 匯入預檢更新明細：所有 preflight 入口對同 stable key 更新／合併顯示 type、display、stable key 與必要主要變更；Windows 使用 core protocol 結果。
-3. Quiz 題數直接輸入／自訂值；再處理 `○／×`、`reorder_4` 完整句、漢字洩題＋同音詞唯一答案。
-4. 手機 Quiz 架構 spike：TUI/SSH 僅備援，優先評估 Tailscale-only Web／PWA、受限 API、認證、session／斷線恢復、多裝置安全邊界。
-5. Quiz 啟動效能／動態 loading、history polish、grammar 詳細頁 hanging indent 與其他既有 backlog。
+### dev1 safety foundation — actual Arch gate PASS
+
+1. Linux installer：staged revision、atomic `current` activation、launcher/revision rollback、installer lock、version/revisions/compat symlink guards、Python >= 3.10 preflight。
+2. core read-only connection：current schema 直接 `mode=ro`＋`query_only`；缺 DB／舊 schema 只在 memory 建立／migration，不 chmod/recover/prune/migrate 實體 DB。
+3. Quiz explicit DB path：外部既有 parent 不 chmod；app-owned default parent 維持 0700，quiz.db 維持 0600。
+4. 新增 Linux core CI：Python 3.10＋3.13、compileall、完整 pytest、isolated installer smoke。
+
+### dev2 recent UX — dev1 gate 後
+
+5. 匯入預檢更新明細：dev2 implemented；所有 local/Windows check/import 入口共用 core `updates[]/changes[]`。
+6. grammar romaji search：dev2 implemented；搜尋層建立可靠 kana-derived token，不改 schema、不猜漢字讀音。
+7. Quiz 題數直接輸入：dev2 implemented；setup 可直接鍵入 1–100，既有 shortage flow 處理可用題庫不足。
+
+### release gate
+
+- actual Arch：dev2 targeted `10 passed`；完整 repository `455 passed, 18 subtests passed`；正式 DB install/read-only hash、mtime、mode 不變。
+- Windows PowerShell 5.1＋SSH：0.7.3 install/reinstall、update-detail check、protocol、no-op import、來源刪除全部 PASS。
+- schema 維持 core v5／Quiz v2；release tag 僅在 push 後 Core regression 與 Windows import client CI 都 success 時建立。
+
+## Post-v0.7.3 next priorities
+
+1. Quiz correctness／UI：`○／×`、`reorder_4` 完整句與高亮、漢字洩題、同音詞／多重合理答案防護。
+2. Quiz performance／loading：量測 candidate pool、source hydration、normalized index／lazy generation／QuizSourceSnapshot，再做動態 loading。
+3. 手機 Quiz architecture spike：TUI/SSH 僅備援，優先評估 Tailscale-only Web／PWA、受限 API、認證、session／斷線恢復、多裝置 concurrency。
+4. grammar 詳細頁 hanging indent／長段落 wrapping 與其他一般 UI backlog。
+5. storage hardening：Quiz migration history backup、corrupt `.pending-*` audit/cleanup UX 等較低優先項。
 
 ## 0.7.1 高優先主軸 — completed
 
@@ -216,3 +237,4 @@
 - stable public IDs，不使用 SQLite row ID。
 - 每一階段有 contract、fault-isolation、regression tests。
 - 狀態或下一步變更時同步 handoff、roadmap、continuation prompt 與 audit。
+- 每次成功 dev gate／release 固定清理 obsolete patch/script/SHA/snapshot/temp/失敗 log；保留最新成功 log、DB safety backup 與 rollback/release artifact。失敗 gate 的診斷檔保留到後續成功清理。

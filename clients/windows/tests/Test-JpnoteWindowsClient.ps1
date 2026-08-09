@@ -11,7 +11,7 @@ $WindowsRoot = Split-Path -Parent $PSScriptRoot
 $Manifest = Join-Path $WindowsRoot 'JpnoteFileImport\JpnoteFileImport.psd1'
 $Module = Import-Module $Manifest -Force -PassThru
 try {
-    Assert-True ($Module.Version.ToString() -eq '0.7.2') 'module version'
+    Assert-True ($Module.Version.ToString() -eq '0.7.3') 'module version'
     Assert-True ($null -ne (Get-Command Test-JpnoteFile -ErrorAction Stop)) 'Test-JpnoteFile export'
     Assert-True ($null -ne (Get-Command Import-JpnoteFile -ErrorAction Stop)) 'Import-JpnoteFile export'
 

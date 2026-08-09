@@ -47,7 +47,7 @@ def test_module_has_local_source_safety_and_utf8_guards() -> None:
     assert "preflight_token" in lowered
     assert "--preflight-token" in lowered
     assert "expectedstatus" in lowered
-    assert "[version]'0.7.2'" in lowered
+    assert "[version]'0.7.3'" in lowered
     assert "review_items" in lowered
     assert "[y/n]" in lowered
 
@@ -55,9 +55,9 @@ def test_module_has_local_source_safety_and_utf8_guards() -> None:
 def test_manifest_and_installer_are_versioned() -> None:
     manifest = read(WINDOWS / "JpnoteFileImport" / "JpnoteFileImport.psd1")
     installer = read(WINDOWS / "Install-JpnoteWindowsClient.ps1")
-    assert "ModuleVersion = '0.7.2'" in manifest
+    assert "ModuleVersion = '0.7.3'" in manifest
     assert "PowerShellVersion = '5.1'" in manifest
-    assert "$Version = '0.7.2'" in installer
+    assert "$Version = '0.7.3'" in installer
     assert "Modules\\JpnoteFileImport" in installer
     assert "_backups" in installer
 

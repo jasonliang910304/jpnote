@@ -1,6 +1,6 @@
 # jpnote 使用者操作手冊
 
-本手冊對應 jpnote v0.7.2。`jpnote --help` 提供精簡指令索引；`jpnote manual` 會輸出這份完整手冊，`jpnote manual --path` 會顯示手冊檔案位置。
+本手冊對應 jpnote v0.7.3 開發版。`jpnote --help` 提供精簡指令索引；`jpnote manual` 會輸出這份完整手冊，`jpnote manual --path` 會顯示手冊檔案位置。
 
 > 原則：任何會修改資料的操作都應先確認輸入與備份；`--check` 是真正 read-only 的預檢，不會建立、升級、修復或改寫實體資料庫。
 
@@ -12,7 +12,7 @@
 
 ## 1.1 需求
 
-- Python 3
+- Python >= 3.10
 - SQLite（Python 標準函式庫內建支援即可）
 - fzf：選配；提供互動 browse／選擇器。沒有 fzf 仍可使用非互動 CLI。
 - Wayland `wl-paste` / `wl-copy`：只有預設剪貼簿模式的 `jpnote paste` 與 `--copy-report` 需要；`jpnote paste --stdin` 不需要。
@@ -22,7 +22,7 @@
 
 ```bash
 mkdir -p /tmp/jpnote-install
-tar -xzf jpnote-v0.7.2.tar.gz -C /tmp/jpnote-install --strip-components=1
+tar -xzf jpnote-v0.7.3.tar.gz -C /tmp/jpnote-install --strip-components=1
 /tmp/jpnote-install/install.sh
 rehash
 jpnote --version
@@ -41,7 +41,7 @@ jpnote init
 ~/.local/bin/jpnote
 ```
 
-若啟動器已存在，安裝器會先備份舊啟動器，再以原子替換方式安裝新版。
+安裝器先把新版複製到同版本的獨立 revision、驗證版本後，再以原子 symlink activation 切換 `current`。既有啟動器會先備份；若 activation／launcher 驗證失敗，會恢復先前 revision／launcher。version target、revisions directory 與受管理 compatibility path 若被 symlink／非預期檔案替換，installer 會 fail closed。
 
 ## 1.3 升級
 
@@ -137,7 +137,7 @@ jpnote import FILE --keep-source
 
 ## 3.2 Windows PowerShell client
 
-repository 的 `clients\windows` 提供正式 Windows client。它需要既有 SSH host／alias（預設 `jpnote`）能連到已安裝 jpnote 0.7.2 以上的 Arch 主機。
+repository 的 `clients\windows` 提供正式 Windows client。v0.7.3 client 需要既有 SSH host／alias（預設 `jpnote`）能連到已安裝 jpnote 0.7.3 以上的 Arch 主機。
 
 安裝會把版本化 module 同時放到 Windows PowerShell 5.1 與 PowerShell 7 的使用者模組路徑：
 
@@ -156,7 +156,7 @@ Test-JpnoteFile "$HOME\Downloads\jpnote.json"
 Import-JpnoteFile "$HOME\Downloads\jpnote.json"
 ```
 
-`Import-JpnoteFile` 會先執行遠端完整預檢，顯示結果後要求輸入大寫 `IMPORT`。Windows client 將預檢回傳的 `preflight_token` 帶入正式匯入；若 JSON、normalized plan 或相關 DB outcome 已改變，Arch 會拒絕過期確認。仍有 review／conflict 時，Windows client 也會停止，不會自動加 `--accept-warnings`。
+`Import-JpnoteFile` 會先執行遠端完整預檢；若同 stable key 將更新／合併，摘要後逐筆顯示 type、display、stable key 與 core 回傳的主要 field changes，再要求輸入大寫 `IMPORT`。`Test-JpnoteFile` 顯示相同更新明細。Windows client 不自行重算 diff。client 將預檢回傳的 `preflight_token` 帶入正式匯入；若 JSON、normalized plan 或相關 DB outcome 已改變，Arch 會拒絕過期確認。仍有 review／conflict 時也會停止，不會自動加 `--accept-warnings`。
 
 Arch 回傳明確成功後，才詢問是否刪除 Windows 本機來源檔，預設 `[y/N]` 保留。亦可使用 `-DeleteSource`／`-KeepSource`。刪除前重新比對大小、建立／修改時間與 SHA-256；來源消失、被修改、替換或變成 reparse point 時只保留，不影響已成功的 DB transaction。
 
@@ -431,7 +431,7 @@ jpnote search QUERY --format json
 jpnote search QUERY --select
 ```
 
-`search` 與 `browse` 的 entry 搜尋欄位一致；結果排序仍優先 exact stable key／display／reading／原始 romaji，再到寬鬆 romaji 與一般內容命中。
+`search` 與 `browse` 的 entry 搜尋欄位一致；結果排序仍優先 exact stable key／display／reading／原始 romaji，再到寬鬆 romaji 與一般內容命中。grammar 另外會從 key／display／reading／aliases 中可可靠辨識的假名片段建立 search-only romaji token，例如 `imasu` 可找到 `いる／います`、`teiru` 可找到 `Vている`。含漢字但沒有可靠假名依據時不猜讀音。
 
 ## 4.3 list
 
@@ -502,8 +502,10 @@ Quiz: ~/.local/share/jpnote/quiz.db     schema v2
 ```text
 ↑/↓       移動
 ←/→       調整模式或題數
-1–3       直接選模式
-Enter     模式 → 題數 → 開始測驗
+題數列     可直接輸入 1–100（例如 50）
+Backspace 修正正在輸入的題數
+1–3       模式列／非題數輸入時可直接選模式
+Enter     模式 → 題數（commit）→ 開始測驗
 f         JLPT 多選
 o         來源多選
 Shift+H   recent history

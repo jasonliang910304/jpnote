@@ -224,7 +224,7 @@ function Invoke-JpnoteRemoteProtocol {
     if ([string]::IsNullOrWhiteSpace($Stdout)) {
         throw (
             "Arch jpnote 沒有回傳 import protocol JSON（SSH exit code $ExitCode）。" +
-            '請確認遠端已安裝 jpnote 0.7.2 以上，且 SSH alias 可用。'
+            '請確認遠端已安裝 jpnote 0.7.3 以上，且 SSH alias 可用。'
         )
     }
 
@@ -254,8 +254,8 @@ function Invoke-JpnoteRemoteProtocol {
     catch {
         throw "遠端 jpnote version 格式無法辨識：$($Response.jpnote_version)"
     }
-    if ($RemoteVersion -lt [version]'0.7.2') {
-        throw "遠端 jpnote 版本過舊：$RemoteVersion；需要 0.7.2 以上。"
+    if ($RemoteVersion -lt [version]'0.7.3') {
+        throw "遠端 jpnote 版本過舊：$RemoteVersion；需要 0.7.3 以上。"
     }
 
     $ExpectedStatus = if ([bool]$Response.ok) { 'success' } else { 'error' }
@@ -314,6 +314,24 @@ function Show-JpnotePreflightSummary {
         "衝突 $($Summary.conflicts)｜" +
         "作答 $($Summary.attempts)"
     )
+
+    $Updates = @($Response.preflight.updates)
+    if ($Updates.Count -gt 0) {
+        Write-Host ''
+        Write-Host "將更新／合併的既有項目（$($Updates.Count)）："
+        foreach ($Item in $Updates) {
+            $TypeLabel = if ([string]$Item.type -eq 'grammar') { '文法' } else { '單字' }
+            $Display = [string]$Item.display
+            $Key = [string]$Item.key
+            Write-Host "  - [$TypeLabel] $Display <$Key>"
+            foreach ($Change in @($Item.changes)) {
+                $ChangeText = [string]$Change.text
+                if (-not [string]::IsNullOrWhiteSpace($ChangeText)) {
+                    Write-Host "    · $ChangeText"
+                }
+            }
+        }
+    }
 
     if (
         [int]$Summary.review_items -gt 0 -or

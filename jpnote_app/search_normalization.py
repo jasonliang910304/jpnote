@@ -12,7 +12,10 @@ import re
 import unicodedata
 from typing import Any, Iterable
 
+from .romaji import spaced_hepburn
+
 _SEPARATORS = re.compile(r"[\s\-‐‑‒–—―_'’`]+")
+_KANA_RUN = re.compile(r"[ぁ-ゖゝゞァ-ヺヽヾー]+")
 _MACRON_OPTIONS = {
     "ā": ("a", "aa"),
     "ī": ("i", "ii"),
@@ -87,6 +90,46 @@ def romaji_variants(value: str) -> set[str]:
     return variants
 
 
+def grammar_romaji_variants(entry: dict[str, Any]) -> set[str]:
+    """Derive safe search-only romaji from kana fragments in grammar labels.
+
+    Grammar display strings commonly mix notation such as ``V``/``N``/``～``
+    with kana.  Only contiguous kana runs are romanized; kanji are deliberately
+    ignored unless a separate kana reading/alias is already present.  The
+    result is search metadata only and must never become stored canonical data.
+    """
+    if str(entry.get("type") or "") != "grammar":
+        return set()
+
+    candidates = [
+        str(entry.get("key") or "").removeprefix("grammar:"),
+        str(entry.get("display") or ""),
+        str(entry.get("reading") or ""),
+        *(str(value) for value in entry.get("aliases", [])),
+    ]
+    variants: set[str] = set()
+    for candidate in candidates:
+        normalized = unicodedata.normalize("NFKC", candidate)
+        romanized_runs: list[str] = []
+        for kana in _KANA_RUN.findall(normalized):
+            romanized = spaced_hepburn(kana)
+            if not romanized:
+                continue
+            romanized_runs.append(romanized)
+            variants.update(romaji_variants(romanized))
+        # Grammar notation can split one spoken pattern into multiple kana
+        # runs (for example ``Nに＋なる``).  Add every contiguous run window
+        # so queries such as ``ninaru`` work without guessing any kanji
+        # reading.  Labels are short, but keep a small cap for defensive cost.
+        if 1 < len(romanized_runs) <= 12:
+            for start in range(len(romanized_runs)):
+                for stop in range(start + 2, len(romanized_runs) + 1):
+                    variants.update(
+                        romaji_variants(" ".join(romanized_runs[start:stop]))
+                    )
+    return {value for value in variants if value}
+
+
 def entry_search_metadata(entry: dict[str, Any]) -> str:
     """Build hidden fzf/search metadata without changing visible presentation."""
     values: list[str] = []
@@ -99,6 +142,7 @@ def entry_search_metadata(entry: dict[str, Any]) -> str:
             values.append(value)
     values.extend(str(value) for value in entry.get("aliases", []) if str(value).strip())
     values.extend(sorted(romaji_variants(str(entry.get("romaji") or ""))))
+    values.extend(sorted(grammar_romaji_variants(entry)))
     for source in entry.get("sources", []):
         value = str(source or "").strip()
         if value:
@@ -172,8 +216,13 @@ def entry_match_score(entry: dict[str, Any], query: str, *, sql_match: bool = Fa
         variants = romaji_variants(romaji)
         if compact_query in variants:
             return 5
+        grammar_variants = grammar_romaji_variants(entry)
+        if compact_query in grammar_variants:
+            return 6
         if any(compact_query in variant for variant in variants):
             return 7
+        if any(compact_query in variant for variant in grammar_variants):
+            return 8
 
     ordinary_values = [
         key,

@@ -1,6 +1,6 @@
 ﻿@{
     RootModule = 'JpnoteFileImport.psm1'
-    ModuleVersion = '0.7.2'
+    ModuleVersion = '0.7.3'
     GUID = '44f971f8-3c0a-4f5e-9c5b-9837cd56849f'
     Author = 'Jason Liang / OpenAI ChatGPT'
     CompanyName = 'jpnote'

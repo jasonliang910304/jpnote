@@ -1,4 +1,16 @@
 # Changelog
+## 0.7.3 — 2026-08-09
+
+- Linux installer 改為 revisioned staged install 與 atomic `current` activation；加入 installer lock、target/revision/symlink guards、launcher/revision rollback，並在任何 install-tree mutation 前拒絕 Python < 3.10。
+- core read-only 路徑不再因 browse/search/stats/audit/duplicates 等讀取命令對正式 DB 執行 migration、pending recovery、backup prune 或 chmod；舊／不完整 schema 僅在 memory snapshot 相容。
+- 修正 explicit Quiz DB path 會 chmod 外部既有 parent 的問題；app-owned default parent 仍為 0700，Quiz DB 檔仍維持安全權限。
+- 新增 Linux core CI：Python 3.10／3.13 的 compileall、完整 pytest 與 isolated installer smoke；Windows client CI 保留 PowerShell 5.1／7 與 protocol gates。
+- import preflight 新增同 stable key 更新明細與 field-level changes；`jpnote import --check`、一般 import 內建 check、`Test-JpnoteFile`、`Import-JpnoteFile` 共用 core report/protocol，Windows 不自行重算。
+- grammar 搜尋新增可靠 kana-derived romaji variants，不修改 canonical/schema，也不猜沒有 reading/alias 的漢字讀音。
+- Quiz setup 題數支援直接鍵入 1–100，並保留既有方向鍵與題庫不足確認流程。
+- actual Arch gate：targeted UX `10 passed`；完整 suite `455 passed, 18 subtests passed`；正式 DB install/read-only hash/mtime/mode 不變。Windows PowerShell 5.1＋SSH 0.7.3 install/reinstall、update-detail check、protocol、no-op import、來源刪除 real gate 全部 PASS。
+- core SQLite schema 維持 v5、Quiz schema 維持 v2；public import JSON schema 不變。
+
 ## 0.7.2 — 2026-08-03
 
 - 新增 `jpnote import --stdin`／`jpnote import -`，以 16 MiB 上限、strict UTF-8 與 optional BOM 支援直接接收 SSH／pipe 傳入的正式 import payload。

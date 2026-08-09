@@ -133,6 +133,8 @@ class QuizTuiState:
     screen: str = "setup"
     mode: str = "mixed"
     requested_count: int = 10
+    count_input: str = ""
+    count_input_error: str = ""
     levels: tuple[str, ...] = ()
     sources: tuple[str, ...] = ()
     available_levels: tuple[str, ...] = ()
@@ -260,7 +262,11 @@ class QuizTuiController:
 
     def handle_click(self, target: str) -> None:
         if target.startswith("setup-focus:"):
-            self.state.setup_focus = int(target.split(":", 1)[1])
+            target_focus = int(target.split(":", 1)[1])
+            if self.state.setup_focus == 1 and target_focus != 1:
+                if not self._commit_count_input():
+                    return
+            self.state.setup_focus = target_focus
             return
         if target.startswith("mode:"):
             mode = target.split(":", 1)[1]
@@ -381,10 +387,26 @@ class QuizTuiController:
             self.state.should_exit = True
 
     def _handle_setup(self, key: str) -> None:
+        if self.state.setup_focus == 1:
+            if len(key) == 1 and key.isdigit():
+                self._append_count_digit(key)
+                return
+            if key in {"BACKSPACE", "DELETE"}:
+                self._backspace_count_input()
+                return
+            if key == "ESC" and self.state.count_input:
+                self.state.count_input = ""
+                self.state.count_input_error = ""
+                return
+
         if key in {"UP", "k"}:
+            if self.state.setup_focus == 1 and not self._commit_count_input():
+                return
             self.state.setup_focus = (self.state.setup_focus - 1) % 3
             return
         if key in {"DOWN", "j"}:
+            if self.state.setup_focus == 1 and not self._commit_count_input():
+                return
             self.state.setup_focus = (self.state.setup_focus + 1) % 3
             return
         if key in {"1", "2", "3"}:
@@ -392,35 +414,51 @@ class QuizTuiController:
             self.state.setup_focus = 0
             return
         if key == "f":
+            if self.state.setup_focus == 1 and not self._commit_count_input():
+                return
             self.state.level_cursor = 0
             self.state.screen = "level_filter"
             return
         if key == "o":
+            if self.state.setup_focus == 1 and not self._commit_count_input():
+                return
             self.state.source_cursor = 0
             self.state.screen = "source_filter"
             return
         if key == "H":
+            if self.state.setup_focus == 1 and not self._commit_count_input():
+                return
             self._open_history()
             return
         if key in {"LEFT", "h"}:
             if self.state.setup_focus == 0:
                 self._cycle_mode(-1)
             elif self.state.setup_focus == 1:
+                if not self._commit_count_input():
+                    return
                 self._change_count(-1)
             return
         if key in {"RIGHT", "l"}:
             if self.state.setup_focus == 0:
                 self._cycle_mode(1)
             elif self.state.setup_focus == 1:
+                if not self._commit_count_input():
+                    return
                 self._change_count(1)
             return
         if key in {"+", "="}:
+            if self.state.setup_focus == 1 and not self._commit_count_input():
+                return
             self._change_count(1)
             return
         if key in {"-", "_"}:
+            if self.state.setup_focus == 1 and not self._commit_count_input():
+                return
             self._change_count(-1)
             return
         if key in {"ENTER", "SPACE"}:
+            if self.state.setup_focus == 1 and not self._commit_count_input():
+                return
             if self.state.setup_focus < 2:
                 self.state.setup_focus += 1
             else:
@@ -637,7 +675,55 @@ class QuizTuiController:
         index = MODE_ORDER.index(self.state.mode)
         self.state.mode = MODE_ORDER[(index + delta) % len(MODE_ORDER)]
 
+    def _append_count_digit(self, digit: str) -> None:
+        current = self.state.count_input
+        if current == "0":
+            candidate = digit
+        else:
+            candidate = current + digit
+        value = int(candidate or "0")
+        if value > MAX_QUESTION_COUNT:
+            self.state.count_input_error = (
+                f"題數上限為 {MAX_QUESTION_COUNT}"
+            )
+            return
+        self.state.count_input = candidate
+        self.state.count_input_error = (
+            "" if value >= MIN_QUESTION_COUNT else
+            f"題數需介於 {MIN_QUESTION_COUNT}–{MAX_QUESTION_COUNT}"
+        )
+
+    def _backspace_count_input(self) -> None:
+        if not self.state.count_input:
+            return
+        self.state.count_input = self.state.count_input[:-1]
+        if not self.state.count_input:
+            self.state.count_input_error = ""
+            return
+        value = int(self.state.count_input)
+        self.state.count_input_error = (
+            "" if MIN_QUESTION_COUNT <= value <= MAX_QUESTION_COUNT else
+            f"題數需介於 {MIN_QUESTION_COUNT}–{MAX_QUESTION_COUNT}"
+        )
+
+    def _commit_count_input(self) -> bool:
+        if not self.state.count_input:
+            self.state.count_input_error = ""
+            return True
+        value = int(self.state.count_input)
+        if not MIN_QUESTION_COUNT <= value <= MAX_QUESTION_COUNT:
+            self.state.count_input_error = (
+                f"題數需介於 {MIN_QUESTION_COUNT}–{MAX_QUESTION_COUNT}"
+            )
+            return False
+        self.state.requested_count = value
+        self.state.count_input = ""
+        self.state.count_input_error = ""
+        return True
+
     def _change_count(self, delta: int) -> None:
+        self.state.count_input = ""
+        self.state.count_input_error = ""
         self.state.requested_count = min(
             MAX_QUESTION_COUNT,
             max(MIN_QUESTION_COUNT, self.state.requested_count + delta),
@@ -911,8 +997,12 @@ class QuizTuiController:
         lines.append(("▶ " if focus == 0 else "  ") + "模式：" + "  ".join(mode_bits))
         targets.append((row, "setup-focus:0"))
         row = len(lines)
-        lines.append(("▶ " if focus == 1 else "  ") + f"題數：{self.state.requested_count}")
+        count_value = self.state.count_input or str(self.state.requested_count)
+        editing = "（輸入中）" if self.state.count_input else ""
+        lines.append(("▶ " if focus == 1 else "  ") + f"題數：{count_value}{editing}")
         targets.append((row, "setup-focus:1"))
+        if focus == 1 and self.state.count_input_error:
+            lines.append(f"    {self.state.count_input_error}")
         level_text = "、".join(self.state.levels) or "全部"
         source_text = "、".join(self.state.sources) or "全部"
         row = len(lines)
@@ -930,8 +1020,8 @@ class QuizTuiController:
         lines.extend(
             [
                 "",
-                "↑/↓ 移動｜←/→ 調整｜1–3 選模式｜Enter 下一項/開始｜q 離開",
-                "f JLPT 篩選｜o 來源篩選｜Shift+H 歷史紀錄",
+                "↑/↓ 移動｜←/→ 調整｜題數列可直接輸入 1–100｜Enter 確認/開始｜q 離開",
+                "Backspace 修正題數｜1–3 選模式｜f JLPT｜o 來源｜Shift+H 歷史",
             ]
         )
         return self._screen(lines, width, targets)

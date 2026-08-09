@@ -260,11 +260,18 @@ class QuizSessionStore:
         clock: Callable[[], str] = _timestamp_now,
         id_factory: Callable[[str], str] = _default_id_factory,
     ) -> None:
+        explicit_path = path is not None or bool(os.environ.get("JPNOTE_QUIZ_DB"))
         self.path = Path(path) if path is not None else default_quiz_db_path()
         self._clock = clock
         self._id_factory = id_factory
         try:
-            _secure_directory(self.path.parent)
+            if explicit_path:
+                # An explicit Quiz DB may live in a user-owned/shared directory.
+                # Create a missing parent, but never chmod an existing external
+                # parent merely because Quiz storage was opened there.
+                self.path.parent.mkdir(parents=True, exist_ok=True)
+            else:
+                _secure_directory(self.path.parent)
             self._migrate()
             _secure_file(self.path)
         except QuizStorageUnavailableError:

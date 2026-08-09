@@ -1,0 +1,50 @@
+name: Core regression
+
+on:
+  push:
+    paths:
+      - 'jpnote_app/**'
+      - 'tests/**'
+      - 'install.sh'
+      - 'docs/USER_GUIDE.md'
+      - '.github/workflows/core.yml'
+  pull_request:
+    paths:
+      - 'jpnote_app/**'
+      - 'tests/**'
+      - 'install.sh'
+      - 'docs/USER_GUIDE.md'
+      - '.github/workflows/core.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10', '3.13']
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install test dependency
+        run: python -m pip install --disable-pip-version-check pytest
+      - name: Compile source and tests
+        run: python -m compileall -q jpnote_app tests
+      - name: Full repository regression
+        run: python -m pytest -q -p no:cacheprovider
+      - name: Isolated installer smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          temp_home="$(mktemp -d)"
+          trap 'rm -rf "$temp_home"' EXIT
+          HOME="$temp_home" sh ./install.sh
+          version="$(HOME="$temp_home" "$temp_home/.local/bin/jpnote" --version)"
+          test "$version" = 'jpnote 0.7.3'
+          test -L "$temp_home/.local/lib/jpnote/0.7.3/current"
+          test -f "$temp_home/.local/lib/jpnote/0.7.3/docs/USER_GUIDE.md"
