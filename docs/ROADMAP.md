@@ -1,9 +1,9 @@
 # jpnote 開發路線圖
 
 最後更新：2026-08-09（Asia/Taipei）
-正式 release/tag：v0.7.3；annotated tag 只在 release commit 的 Core／Windows CI 全綠後發布
+正式 release/tag：v0.7.3；annotated tag 固定指向 release commit `6dc8e8729c64c64933a7ff6d568b321b5cb26889`
 正式安裝版本：0.7.3
-目前開發位置：v0.7.3 Arch／Windows manual release gates PASS；release commit push 後等待 Core regression＋Windows import client CI，全綠才發布 v0.7.3 tag
+目前開發位置：v0.7.3 release 完成、Core regression／Windows import client CI 全綠；下一步依 Post-v0.7.3 priorities 進 Quiz correctness／performance，再做 mobile architecture spike
 
 ## 0.7.2 高優先主軸 — completed
 

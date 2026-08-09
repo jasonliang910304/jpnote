@@ -14,11 +14,11 @@
 
 ## 目前基準
 
-- 正式 release/tag：`jpnote v0.7.3`；release script 只在 release commit 的 Core regression 與 Windows import client CI 全綠後發布 annotated tag
+- 正式 release/tag：`jpnote v0.7.3`；annotated tag 固定指向 release commit `6dc8e8729c64c64933a7ff6d568b321b5cb26889`
 - 正式安裝版本：`jpnote 0.7.3`
 - core SQLite schema：v5
 - Quiz SQLite：獨立 `quiz.db`，schema v2
-- v0.7.3 release gate：dev1 safety PASS；dev2 actual Arch PASS（455 passed, 18 subtests passed）；Windows PowerShell 5.1＋SSH 0.7.3 real gate PASS；tag publication 尚需 release-commit CI 全綠
+- v0.7.3 release gate：dev1 safety PASS；dev2 actual Arch PASS（455 passed, 18 subtests passed）；Windows PowerShell 5.1＋SSH real gate PASS；release-commit Core regression／Windows import client CI 全綠
 - Quiz 開發已完成 Phase 1–4，以及 Phase 5 TUI、usability/question-quality、正式 CLI/config、互動式 filters/history navigation、history 逐題檢視與隔離安裝 smoke
 - v0.7.1 最新完整測試：`401 passed, 18 subtests passed`；targeted `16 passed`
 - app-only coverage：`76%`

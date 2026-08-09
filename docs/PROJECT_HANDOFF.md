@@ -1,15 +1,28 @@
 # jpnote 專案交接紀錄
 
 最後更新：2026-08-09（Asia/Taipei）
-正式 release/tag：`jpnote v0.7.3`；annotated tag `v0.7.3` 指向本文件所在 release commit
+正式 release/tag：`jpnote v0.7.3`；annotated tag 固定指向 release commit `6dc8e8729c64c64933a7ff6d568b321b5cb26889`
 正式安裝版本：`jpnote 0.7.3`
-目前開發 checkpoint：v0.7.3 Arch／Windows manual release gates 全部通過；release commit push 後必須等 Core regression 與 Windows import client CI 全綠，才發布 annotated `v0.7.3` tag
+目前開發 checkpoint：v0.7.3 已正式發布；release commit `6dc8e8729c64c64933a7ff6d568b321b5cb26889` 的 Core regression 與 Windows import client CI 全綠，`v0.7.3` tag 已發布；下一步進 Quiz correctness／performance，之後做 mobile architecture spike
 
 用途：讓新的 ChatGPT 對話或新的開發工作階段，不依賴舊聊天內容也能直接接續工作。
 
 ---
 
 ## 1. 目前可信基準
+
+### 2026-08-09 v0.7.3 release baseline
+
+```text
+branch=main
+release commit=6dc8e8729c64c64933a7ff6d568b321b5cb26889
+v0.7.3^{}=6dc8e8729c64c64933a7ff6d568b321b5cb26889
+current main=release commit + handoff-only documentation sync
+working tree=clean
+CI=Core regression PASS；Windows import client PASS
+```
+
+release log：`/home/jasonliang/Projects/jpnote-development-logs/v0.7.3-release-20260809T143136.log`。
 
 ### 2026-08-08 release／maintenance baseline
 
