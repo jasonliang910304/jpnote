@@ -13,6 +13,20 @@ from .export_markdown import export_all
 T = TypeVar("T")
 
 
+class PostCommitExportError(RuntimeError):
+    """The DB commit succeeded but refreshing derived Markdown did not."""
+
+    def __init__(self, label: str, cause: BaseException, backup: Path | None) -> None:
+        self.label = label
+        self.cause = cause
+        self.backup = backup
+        self.database_committed = True
+        super().__init__(
+            "資料庫變更已完成，但 Markdown 更新失敗："
+            f"{cause}。不需要重做原本的資料修改；請稍後執行 jpnote export。"
+        )
+
+
 @dataclass(slots=True)
 class SafeMutationResult(Generic[T]):
     value: T
@@ -48,7 +62,12 @@ def execute_safe_mutation(
             modified = conn.total_changes > before_changes
             backup_handle.mark_changed(modified)
             if modified and refresh_exports:
-                exports = export_all(conn)
+                try:
+                    exports = export_all(conn)
+                except (Exception, KeyboardInterrupt) as exc:
+                    raise PostCommitExportError(
+                        label, exc, backup_handle.path
+                    ) from exc
         finally:
             conn.close()
     backup = backup_handle.path if backup_handle else None

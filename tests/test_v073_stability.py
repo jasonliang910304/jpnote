@@ -224,7 +224,7 @@ class InstallerStabilityTests(unittest.TestCase):
             check=False,
         )
 
-    def _minimal_source(self, root: Path, *, output: str = "jpnote 0.7.3") -> Path:
+    def _minimal_source(self, root: Path, *, output: str | None = None) -> Path:
         source = root / "source"
         source.mkdir()
         shutil.copy2(ROOT / "install.sh", source / "install.sh")
@@ -232,10 +232,10 @@ class InstallerStabilityTests(unittest.TestCase):
         package.mkdir()
         (package / "__init__.py").write_text("", encoding="utf-8")
         (package / "config.py").write_text(
-            'VERSION = "0.7.3"\n', encoding="utf-8"
+            f'VERSION = "{VERSION}"\n', encoding="utf-8"
         )
         (package / "__main__.py").write_text(
-            f'print({output!r})\n', encoding="utf-8"
+            f'print({(output or f"jpnote {VERSION}")!r})\n', encoding="utf-8"
         )
         docs = source / "docs"
         docs.mkdir()
@@ -485,7 +485,7 @@ class InstallerStabilityTests(unittest.TestCase):
             package.mkdir()
             (package / "__init__.py").write_text("", encoding="utf-8")
             (package / "config.py").write_text(
-                'VERSION = "0.7.3"\n', encoding="utf-8"
+                f'VERSION = "{VERSION}"\n', encoding="utf-8"
             )
             (package / "__main__.py").write_text(
                 'print("jpnote broken")\n', encoding="utf-8"
@@ -559,8 +559,8 @@ class CoreCiContractTests(unittest.TestCase):
         self.assertIn("actions/checkout@v6", workflow)
         self.assertIn("actions/setup-python@v6", workflow)
 
-    def test_v073_declares_python_310_minimum(self) -> None:
-        self.assertEqual(VERSION, "0.7.3")
+    def test_current_release_declares_python_310_minimum(self) -> None:
+        self.assertEqual(VERSION, "0.7.4")
         installer = (ROOT / "install.sh").read_text(encoding="utf-8")
         guide = (ROOT / "docs" / "USER_GUIDE.md").read_text(encoding="utf-8")
         self.assertIn('MIN_PYTHON="3.10"', installer)

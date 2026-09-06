@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-VERSION="0.7.3"
+VERSION="0.7.4"
 MIN_PYTHON="3.10"
 SOURCE_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 APP_ROOT="$HOME/.local/lib/jpnote"

@@ -34,6 +34,9 @@
 - [ ] 若 fzf 行為有變，另跑 real-fzf integration 或實機確認
 - [ ] 若 import workflow 有變，驗證完整 preflight 先於寫入、取消不改 DB、`--yes` 不繞過 validation/conflict、safe fix 後重新 preflight
 - [ ] 若 mutation／backup 有變，驗證 no-op、operation failure、post-commit export failure、corrupt backup、undo fallback
+- [ ] 若 restore／undo compatibility 有變，驗證 current/old/future schema、non-jpnote SQLite、migration 後不可用結構、precheck 後 backup replacement；所有 rejected restore 都不得替換正式 DB 或先移除正式 SQLite sidecars
+- [ ] 若 public read facade 有變，驗證 missing DB 不建立 filesystem state、old/incomplete schema 只在 memory migration、future schema fail closed，正式 DB hash/mtime/mode 不變
+- [ ] 若 import transport 有變，驗證 BOM/strict UTF-8/size cap、oversized stream early reject、protocol error contract 與 Windows client fail-closed semantics
 - [ ] 若資料層有變，以真實 DB **副本**跑 quick_check、foreign_key_check、audit、stats
 - [ ] 以真實 DB **副本**執行 read-only Quiz planning，確認不修改 core DB
 

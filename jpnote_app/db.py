@@ -468,10 +468,10 @@ def mutation_backup(label: str) -> Iterator[MutationBackupHandle]:
         handle = MutationBackupHandle(final_path)
         try:
             yield handle
-        except Exception:
+        except BaseException:
             # If the database mutation already committed but a later side effect
-            # (for example Markdown export) failed, retain the pre-mutation undo
-            # point instead of silently discarding it.
+            # (for example Markdown export or Ctrl-C during export) failed, retain
+            # the pre-mutation undo point instead of silently discarding it.
             if handle.changed and pending_path.exists():
                 os.replace(pending_path, final_path)
                 ensure_private_file(final_path)
@@ -505,14 +505,30 @@ def restore_database_from(backup_path: Path) -> None:
         ensure_directories()
         if not backup_path.is_file():
             raise ValueError(f"找不到備份：{backup_path}")
+        # Fast fail for ordinary corruption.  The exact copied candidate is
+        # validated again below, so this check is not relied on for TOCTOU safety.
         if not _sqlite_integrity_ok(backup_path):
             raise ValueError(f"備份完整性檢查失敗，拒絕復原：{backup_path}")
         fd, temp_name = tempfile.mkstemp(prefix="jpnote-restore-", suffix=".db", dir=data_dir())
         os.close(fd)
         temp_path = Path(temp_name)
         try:
-            with closing(sqlite3.connect(backup_path)) as source, closing(sqlite3.connect(temp_path)) as target:
-                source.backup(target)
+            # Validate the exact private snapshot that will become jpnote.db.
+            # This keeps an external replacement of backup_path between checks
+            # from turning validation and installation into two different files.
+            try:
+                with closing(
+                    sqlite3.connect(f"file:{backup_path}?mode=ro", uri=True)
+                ) as source, closing(sqlite3.connect(temp_path)) as target:
+                    source.backup(target)
+            except sqlite3.Error as exc:
+                raise ValueError(
+                    f"備份完整性檢查失敗，拒絕復原：{backup_path}"
+                ) from exc
+            # Revalidate the exact private copy, not the path that was selected.
+            # An external replacement of backup_path after a prior CLI precheck
+            # therefore cannot swap an unvalidated database into production.
+            _validate_restore_candidate(temp_path, display_path=backup_path)
             for suffix in ("-wal", "-shm", "-journal"):
                 Path(str(db_path()) + suffix).unlink(missing_ok=True)
             os.replace(temp_path, db_path())
@@ -559,6 +575,130 @@ def _stored_schema_version(conn: sqlite3.Connection) -> int:
         return int(row[0])
     except (TypeError, ValueError) as exc:
         raise RuntimeError(f"資料庫 schema_version 無效：{row[0]!r}") from exc
+
+
+LEGACY_RESTORE_SIGNATURE = {
+    "entries": frozenset({"key", "type", "display"}),
+    "senses": frozenset({"entry_key", "meaning"}),
+    "sources": frozenset({"entry_key", "source"}),
+}
+
+
+def _schema_columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    return {str(row[1]) for row in conn.execute(f"PRAGMA table_info({table})")}
+
+
+RESTORE_SMOKE_QUERIES = (
+    "SELECT key, type, display, reading, romaji, accent, accent_type, "
+    "accent_display, accent_note, level, review_group, aliases_json, "
+    "origin_type, origin_language, origin_word, origin_note, created_at, updated_at "
+    "FROM entries LIMIT 1",
+    "SELECT entry_key, meaning, example_ja, example_zh FROM senses LIMIT 1",
+    "SELECT entry_key, source, added_at FROM sources LIMIT 1",
+    "SELECT event_key, result, attempt_date, source, section, question, question_type, "
+    "prompt, user_answer, correct_answer, reason, before_text, after_text, parts_json, "
+    "user_order_json, correct_order_json, options_json, created_at FROM attempts LIMIT 1",
+    "SELECT attempt_id, entry_key, role FROM attempt_entries LIMIT 1",
+    "SELECT source_key, target_key, relation_type, note, source, created_at "
+    "FROM grammar_relations LIMIT 1",
+    "SELECT source_key, target_key, relation_type, note, source, created_at "
+    "FROM pending_grammar_relations LIMIT 1",
+)
+
+
+def _restore_compatibility_error(backup_path: Path) -> str | None:
+    """Return why a healthy SQLite backup cannot be used by this jpnote.
+
+    Compatibility is defined by the same migration path the application uses,
+    not by requiring an old database to already contain every modern UNIQUE or
+    foreign-key declaration.  That distinction preserves documented historical
+    migrations while still rejecting future schemas, foreign SQLite files, and
+    databases that remain structurally unusable after an in-memory migration.
+    """
+    try:
+        with closing(sqlite3.connect(f"file:{backup_path}?mode=ro", uri=True)) as source:
+            tables = {
+                str(row[0])
+                for row in source.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                )
+            }
+            for table, required_columns in LEGACY_RESTORE_SIGNATURE.items():
+                if table not in tables:
+                    return f"缺少 jpnote 核心資料表 {table}"
+                missing = required_columns - _schema_columns(source, table)
+                if missing:
+                    return f"{table} 缺少必要欄位：{', '.join(sorted(missing))}"
+
+            stored_version = _stored_schema_version(source)
+            if stored_version > SCHEMA_VERSION:
+                return (
+                    f"備份 schema v{stored_version} 比目前支援的 "
+                    f"v{SCHEMA_VERSION} 新"
+                )
+
+            with closing(sqlite3.connect(":memory:")) as candidate:
+                candidate.row_factory = sqlite3.Row
+                candidate.execute("PRAGMA foreign_keys = ON")
+                source.backup(candidate)
+                migrate_schema(
+                    candidate,
+                    create_migration_backup=False,
+                    prune_after=False,
+                    normalize_relation_values=False,
+                )
+
+                if _stored_schema_version(candidate) != SCHEMA_VERSION:
+                    return "升級後 schema_version 不正確"
+
+                migrated_tables = {
+                    str(row[0])
+                    for row in candidate.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table'"
+                    )
+                }
+                missing_tables = REQUIRED_SCHEMA_TABLES - migrated_tables
+                if missing_tables:
+                    return "升級後缺少必要資料表：" + ", ".join(sorted(missing_tables))
+
+                # Representative reads cover every core table and every column
+                # consumed by the current repository layer.  A historical table
+                # that migrate_schema cannot make usable therefore fails here,
+                # without requiring old schemas to have modern constraints.
+                for query in RESTORE_SMOKE_QUERIES:
+                    candidate.execute(query).fetchone()
+
+                row = candidate.execute("PRAGMA quick_check").fetchone()
+                if not row or str(row[0]).lower() != "ok":
+                    return "升級後 SQLite 完整性檢查失敗"
+                if candidate.execute("PRAGMA foreign_key_check").fetchone() is not None:
+                    return "升級後存在 foreign-key integrity 問題"
+    except (sqlite3.Error, RuntimeError, ValueError) as exc:
+        return str(exc) or exc.__class__.__name__
+    return None
+
+
+def _validate_restore_candidate(
+    candidate_path: Path,
+    *,
+    display_path: Path | None = None,
+) -> None:
+    """Reject a restore candidate before it can replace the formal database."""
+    label = candidate_path if display_path is None else display_path
+    if not candidate_path.is_file():
+        raise ValueError(f"找不到備份：{label}")
+    if not _sqlite_integrity_ok(candidate_path):
+        raise ValueError(f"備份完整性檢查失敗，拒絕復原：{label}")
+    compatibility_error = _restore_compatibility_error(candidate_path)
+    if compatibility_error:
+        raise ValueError(
+            f"備份與目前 jpnote 不相容，拒絕復原：{label}（{compatibility_error}）"
+        )
+
+
+def validate_restore_candidate(backup_path: Path) -> None:
+    """Side-effect-free compatibility gate for undo selection and tooling."""
+    _validate_restore_candidate(backup_path)
 
 
 RELATION_LABEL_MIGRATIONS = {

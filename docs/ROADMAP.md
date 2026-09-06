@@ -1,9 +1,9 @@
 # jpnote 開發路線圖
 
-最後更新：2026-08-09（Asia/Taipei）
+最後更新：2026-09-06（Asia/Taipei）
 正式 release/tag：v0.7.3；annotated tag 固定指向 release commit `6dc8e8729c64c64933a7ff6d568b321b5cb26889`
-正式安裝版本：0.7.3
-目前開發位置：v0.7.3 release 完成、Core regression／Windows import client CI 全綠；下一步依 Post-v0.7.3 priorities 進 Quiz correctness／performance，再做 mobile architecture spike
+正式安裝版本：0.7.4（local formal gate PASS；GitHub release/tag pending）
+目前開發位置：v0.7.4 correctness/safety local release gate 已 PASS；actual repo 尚未 commit，GitHub `main`/tag 仍在 v0.7.3 baseline。GitHub 遠端變更一律由使用者親手處理；AI 僅做 read-only GitHub 查詢、隔離修改、測試與 patch 準備。
 
 ## 0.7.2 高優先主軸 — completed
 
@@ -58,13 +58,81 @@
 - Windows PowerShell 5.1＋SSH：0.7.3 install/reinstall、update-detail check、protocol、no-op import、來源刪除全部 PASS。
 - schema 維持 core v5／Quiz v2；release tag 僅在 push 後 Core regression 與 Windows import client CI 都 success 時建立。
 
-## Post-v0.7.3 next priorities
+## v0.7.4 — Deep Audit correctness / safety
 
-1. Quiz correctness／UI：`○／×`、`reorder_4` 完整句與高亮、漢字洩題、同音詞／多重合理答案防護。
-2. Quiz performance／loading：量測 candidate pool、source hydration、normalized index／lazy generation／QuizSourceSnapshot，再做動態 loading。
-3. 手機 Quiz architecture spike：TUI/SSH 僅備援，優先評估 Tailscale-only Web／PWA、受限 API、認證、session／斷線恢復、多裝置 concurrency。
-4. grammar 詳細頁 hanging indent／長段落 wrapping 與其他一般 UI backlog。
-5. storage hardening：Quiz migration history backup、corrupt `.pending-*` audit/cleanup UX 等較低優先項。
+目標：先消除唯一 High finding 與會造成行為分歧／錯誤結果的 correctness Medium；不做大規模效能重構。
+
+完成 scope：
+
+1. restore/undo compatibility gate：future schema、foreign SQLite、migration 後不可用 schema 在正式 DB replace 前 fail closed；exact private copy 會再次驗證，避免 path replacement race。
+2. `JpnoteCore` 純 read facade 全部走 `connect_readonly()`；Quiz default read source 一併 side-effect-free。
+3. DB commit 後 Markdown export failure 明確區分為 post-commit failure；protocol 告知 DB 已提交，避免使用者重做 mutation。
+4. attempt 同 event key 的 content identity／linked-entry ordering 統一。
+5. relation reciprocal/inverse audit 改成 directed logical identity。
+6. duplicate remap scalar merge 改為 deterministic precedence；有歧義時 fail closed。
+7. legacy paste clipboard／stdin 統一 16 MiB strict UTF-8 ingest boundary；parser 演算法效能改善留到 v0.7.5。
+
+完成 gate：上述反例已在 v0.7.3 baseline 重現並於 v0.7.4 candidate 消失；assistant clean-apply exhaustive gate PASS，actual Arch full regression `485 passed, 36 subtests passed`，0.7.3 → 0.7.4 正式 install 與 formal DB fingerprint immutability gate PASS。core schema v5、Quiz schema v2、public import JSON schema 均維持不變。GitHub release commit/push/CI/tag 仍待使用者完成。
+
+## v0.7.5 — Performance & Architecture Cleanup
+
+第一原則：**功能正常／資料安全／行為等價 > 架構漂亮 > 效能提升 > dead-code 瘦身**。Git rollback 只是最後保險，不能作為大改後再看有沒有壞的替代品。
+
+主要工作：
+
+- 建立 reusable bulk read／immutable source snapshot／normalized indexes，讓 export、audit、preflight、search、Quiz 等不再各自重複 hydrate。
+- attempt identity：移除 repeated full-table scan／N+1，建立一次性 identity snapshot/index。
+- Quiz：移除 candidate generation O(N²)、重複 full hydration、shortage confirmation 重算；加入真正動態 loading。
+- export／import preflight／search/list/romaji-audit：遷移至 bulk hydration，加入 query-count 與 scaling regression。
+- `parse_payload()`：處理 adversarial repeated `raw_decode` 超線性掃描；所有 ingest path 已在 v0.7.4 先有 hard size cap。
+- fzf：處理 per-keypress subprocess/full normalization 的效能面；matching/ranking semantics 本身在 v0.7.6 統一。
+- 對被新架構取代的舊 implementation 做 bounded cleanup：confirmed dead code 直接刪；superseded duplicate 先遷移 caller 再刪；migration/public API/installer fallback 等 compatibility-sensitive code 不因「看似沒用」就移除。
+
+若工作量或耦合過大，可拆成可獨立停下且功能完整的 checkpoint，例如：
+
+- `0.7.5.1`：shared snapshot/bulk-hydration foundation＋低風險 read paths。
+- `0.7.5.2`：import preflight＋attempt identity/index。
+- `0.7.5.3`：Quiz snapshot/index/O(N²)/loading。
+- `0.7.5.4`：dead-code/obsolete API cleanup＋equivalence/full-regression gate。
+
+實際子版本數量依變更面與風險決定，不預先強迫拆滿四版。每個 checkpoint 都必須可正常使用，不能依賴下一個子版本才能恢復功能。
+
+## v0.7.6 — Search + Quiz/UI correctness
+
+- grammar derived-romaji ranking：`imasu` 不再因 substring 大量命中 `kimasu/shimasu/arimasu/moraimasu`；exact/whole variant 優先。
+- core search 與 interactive fzf 共用同一 matcher/ranker source of truth。
+- Quiz True/False 顯示 `○／×`；`reorder_4` feedback 顯示完整句並高亮 movable portion，保留無色 fallback。
+- 保留並強化現有 kana-prompt homophone guard；基本同音詞安全已存在，不再當作「從零實作」項目。
+- Quiz history export/delete TUI 入口與 history polish。
+- grammar 詳細頁 numbered paragraph hanging indent／長段落 wrapping。
+- fzf 未分類／mistake level 空值等一般 UX，以及 fuzzy duplicate candidate／確認流程。
+
+## v0.7.7 — Crash / Filesystem / CI hardening
+
+- backup/restore publication 的 parent-directory fsync。
+- installer SIGKILL／stale lock／activation residue recovery。
+- app-owned data/config path symlink chmod ownership policy。
+- Windows CI path trigger 補齊 shared import-contract modules。
+- GitHub Actions immutable SHA／test dependency provenance hardening。
+- Quiz migration history backup、corrupt `.pending-*` audit/cleanup UX。
+
+## v0.8.0 — Mobile / Web architecture
+
+先完成 0.7.x correctness/performance/hardening，再擴張 frontend/trust boundary。優先 architecture spike：
+
+- Tailscale-only Web/PWA，TUI/SSH 保留備援。
+- 受限 API surface、authentication/authorization、CSRF/origin boundary。
+- session resume、斷線恢復、多裝置 concurrency。
+- Quiz/core DB isolation 與 mutation 權限。
+- 是否讓 mimir 參與部署／服務層，需在正式設計後再決定。
+
+## v0.8.x+ learning/data features
+
+- `grammar_combinations` 結構化搭配。
+- AI context 精簡匯出、romaji 分隔／外來語 origin 呈現改善。
+- optional negative scoring／guess penalty。
+- response timing、streak、familiarity、spaced repetition。
+- radar chart、長期趨勢。
 
 ## 0.7.1 高優先主軸 — completed
 
@@ -202,23 +270,12 @@
 - Quiz 初始 question-event persistence 改用 `executemany()` batch insert；schema、snapshot 與 transaction 邊界不變。
 - 新增 helper path-isolation 與 TUI loading-refresh regression tests。
 
-### 下一個 checkpoint：使用回饋與 TUI polish
+### 後續 Quiz／UI backlog 已整合進版本路線
 
-1. 是非題顯示改為 `○／×`，同步 question/feedback/history。
-2. `reorder_4` 回饋顯示完整句子並高亮可重組片段，保留無色 fallback。
-3. history export/delete TUI 入口、確認、刷新與空狀態。
-4. TUI 錯誤訊息與空狀態 polish。
-5. release artifact 自動化與 install/release script 整合。
-
-### 一般功能 backlog
-
-- 單字意思題降低漢字提示；使用假名 prompt 時，排除所有同讀音詞條的意思，無法保證唯一正解便 fallback 或跳過。
-- fuzzy duplicate candidate／確認流程。
-- AI context 精簡匯出。
-- `grammar_combinations`／結構化搭配資訊。
-- romaji 分隔與外來語語源欄位改善。
-- fzf 多選、未分類顯示、mistake level 空值處理。
-- multi-writer retry/serialization 與 attempt identity index optimization。
+- `○／×`、`reorder_4` 完整回饋、history export/delete、hanging indent 與 search/fzf correctness：排入 v0.7.6。
+- 漢字意思題的基本 kana-prompt／homophone guard 已存在；後續只保留 regression 與必要強化，不再列為未實作 foundation。
+- Quiz source snapshot/index、O(N²)、dynamic loading：排入 v0.7.5 Performance & Architecture Cleanup。
+- fuzzy duplicate、AI context、`grammar_combinations`、romaji/origin 呈現等功能依上方 0.7.6／0.8.x+ 排程。
 
 ### 低優先／不阻塞 Quiz v1
 

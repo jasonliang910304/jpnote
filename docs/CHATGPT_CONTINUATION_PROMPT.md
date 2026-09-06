@@ -15,10 +15,14 @@
 ## 目前基準
 
 - 正式 release/tag：`jpnote v0.7.3`；annotated tag 固定指向 release commit `6dc8e8729c64c64933a7ff6d568b321b5cb26889`
-- 正式安裝版本：`jpnote 0.7.3`
+- 正式安裝版本：`jpnote 0.7.4`（actual Arch local formal gate PASS；GitHub release/tag 尚待完成）
+- v0.7.3 release 後 final main／v0.7.4 parent：`851e77add870e2a19fcbe674860828ecccf81852`
+- 目前 source target：`0.7.4` correctness/safety local release gate PASS；actual repo 尚未 commit；GitHub release/tag 尚未變更
+- GitHub write policy：AI 不做 branch/commit/push/tag/PR/workflow 等遠端變更；GitHub 僅 read-only。AI 在隔離環境準備/驗證 patch，所有 GitHub 寫入由使用者親手完成
 - core SQLite schema：v5
 - Quiz SQLite：獨立 `quiz.db`，schema v2
 - v0.7.3 release gate：dev1 safety PASS；dev2 actual Arch PASS（455 passed, 18 subtests passed）；Windows PowerShell 5.1＋SSH real gate PASS；release-commit Core regression／Windows import client CI 全綠
+- v0.7.4 local gate（2026-09-06）：actual Arch `485 passed, 36 subtests passed`；0.7.3 → 0.7.4 正式安裝 PASS；正式 DB SHA-256/size/mtime/mode 不變；real DB copy 1019 items（150 grammar／869 vocabulary）、27 attempts、audit 29 review/0 critical；read-only Quiz planning與 installed protocol import/quick/FK smoke PASS。release commit/push/CI/tag 尚待使用者完成。
 - Quiz 開發已完成 Phase 1–4，以及 Phase 5 TUI、usability/question-quality、正式 CLI/config、互動式 filters/history navigation、history 逐題檢視與隔離安裝 smoke
 - v0.7.1 最新完整測試：`401 passed, 18 subtests passed`；targeted `16 passed`
 - app-only coverage：`76%`
@@ -30,7 +34,7 @@
 - v0.7.2 release gate：Arch `421 passed, 18 subtests passed`；versioned isolated install／正式安裝／DB hash-read-only smoke PASS；Windows PowerShell 5.1＋SSH 實機匯入與後續兩日使用 PASS
 - v0.7.2 release commit/tag：`46644a1ea329d15c85f35b897485763278aa0787`。post-release CI maintenance：`694b869` 拆分 Windows PowerShell 5.1／7 jobs，`e0095ba` 同步 contract test，`28ba7ef` 將依賴 POSIX `fcntl` 的 protocol/core tests 移到 Ubuntu；最終 protocol、Windows PowerShell 5.1、PowerShell 7 三個 jobs 全 PASS；release tag 不移動
 - 正常驗證分工：能在開發環境完成的測試不得轉交使用者；使用者只做完整實際 repository gate、Windows＋SSH 實機 gate與 final release gate
-- v0.7.3 parent baseline：`f429e39ef290247037ab5d1f99e7fdb6fc5d11a0`。dev1 safety gate 與 dev2 recent UX actual Arch gate 均 PASS；dev2 full regression `455 passed, 18 subtests passed`，正式 DB 未變。下一步只做 Windows client 0.7.3 real gate，PASS 後直接 release。詳見 `docs/audits/v0.7.3-stability-development.md`。
+- v0.7.3 歷史開發 parent 為 `f429e39ef290247037ab5d1f99e7fdb6fc5d11a0`；dev1/dev2、Windows real gate 與 release CI 均已完成。v0.7.3 release 後的真正下一版 parent 以 final main `851e77add870e2a19fcbe674860828ecccf81852` 為準。詳見 `docs/audits/v0.7.3-stability-development.md`。
 
 啟動新工作階段先確認基線：
 
@@ -94,16 +98,17 @@ jpnote --version
 
 ## 下一個正確工作項目
 
-v0.7.2 release gate 已完成。下一階段依序處理：
+Deep Adversarial Audit 已完成（Blocking 0 / High 1 / Medium 16 / Low–Medium 2；19 findings）。v0.7.4 correctness/safety 已完成 local gate；目前不要再改 runtime scope，下一步是使用者控制的 release commit → push → CI → annotated tag，之後再做 final handoff-only docs sync。
 
-1. 做一次有邊界的安全／穩定性 gate：安裝回退、read-only side effects、CI／版本相容、backup/undo/Quiz DB 權限與已知高風險 failure paths；通過後不要無限重跑同規模健檢。
-2. 匯入預檢更新明細：dev2 implemented；core report/protocol 回傳 `updates[]` 與 field-level `changes[]`，本機獨立 check、一般 import 內建 check、Windows Test/Import 都呈現同一結果；Windows 不自行重算。
-3. grammar romaji search：dev2 implemented；只從 grammar key/display/reading/aliases 的 kana 片段衍生 search-only token，不改正式資料、不猜漢字。
-4. Quiz 高優先 UI／正確性：題數直接輸入 1–100 已在 dev2 implemented；下一批再做是非題 `○／×`、`reorder_4` 完整句、漢字洩題與同音詞唯一答案保護。
-5. 手機 Quiz 架構 spike：手機 TUI／SSH 僅作備援，優先比較 Tailscale-only Web／PWA、受限 API、認證、session／斷線恢復與多裝置安全邊界，再決定正式實作。
-6. 其後處理 Quiz 啟動效能、動態 loading、grammar 詳細頁 hanging indent、history polish 與其他既有 backlog。
+後續固定排程：
 
-不要因非 blocking finding 重啟同規模廣域健檢；優先依實際使用回饋做針對性修正。
+1. v0.7.5 Performance & Architecture Cleanup；功能等價/資料安全優先，shared snapshot/bulk hydration/index，並 bounded dead-code removal。必要時拆 0.7.5.1/2/3/4，每段必須可獨立正常使用。
+2. v0.7.6 Search + Quiz/UI correctness：`imasu` overmatch、core/fzf ranking、`○／×`、reorder 完整句、history/hanging-indent 等。basic homophone guard 已存在，不當作未實作 foundation。
+3. v0.7.7 crash/filesystem/CI hardening。
+4. v0.8.0 Tailscale-only Web/PWA/mobile architecture。
+5. v0.8.x+ learning/data features。
+
+不要再啟動無邊界廣域 audit；19 findings 與舊 backlog 已整合到 roadmap。
 
 ## 日常資料匯入
 

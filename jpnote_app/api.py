@@ -11,7 +11,7 @@ from typing import Any
 from .attempt_services import delete_attempt_data, replace_attempt_data
 from .browsing import browse_json, browse_records
 from .audit import apply_safe_repairs, run_audit
-from .db import connect, connect_preflight
+from .db import connect_preflight, connect_readonly
 from .import_resolution import resolve_import_plan
 from .repository import get_attempt, get_entry, list_attempts, list_entries, list_recent_entries, search_entries, stats
 from .services import apply_import, duplicate_candidates, merge_entries, prepare_import
@@ -23,11 +23,11 @@ from .attempt_options import apply_safe_option_migrations
 
 class JpnoteCore:
     def list_entries(self, entry_type: str | None = None, level: str | None = None) -> list[dict[str, Any]]:
-        with connect() as conn:
+        with connect_readonly() as conn:
             return list_entries(conn, entry_type, level)
 
     def search(self, query: str) -> list[dict[str, Any]]:
-        with connect() as conn:
+        with connect_readonly() as conn:
             return search_entries(conn, query)
 
     def browse(
@@ -37,7 +37,7 @@ class JpnoteCore:
         results: list[str] | None = None,
         query: str | None = None,
     ) -> list[dict[str, Any]]:
-        with connect() as conn:
+        with connect_readonly() as conn:
             return browse_json(browse_records(
                 conn, types=types, levels=levels, results=results, query=query
             ))
@@ -49,11 +49,11 @@ class JpnoteCore:
         entry_type: str | None = None,
         source: str | None = None,
     ) -> list[dict[str, Any]]:
-        with connect() as conn:
+        with connect_readonly() as conn:
             return list_recent_entries(conn, target_date, since_date, entry_type, source)
 
     def get(self, key: str) -> dict[str, Any] | None:
-        with connect() as conn:
+        with connect_readonly() as conn:
             return get_entry(conn, key)
 
     def prepare_import(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -66,7 +66,7 @@ class JpnoteCore:
             return build_preflight_report(conn, plan)
 
     def romaji_audit(self) -> list[dict[str, Any]]:
-        with connect() as conn:
+        with connect_readonly() as conn:
             return romaji_audit_records(conn)
 
     def normalize_romaji(self) -> list[dict[str, Any]]:
@@ -125,7 +125,7 @@ class JpnoteCore:
         }
 
     def mistakes(self, entry_key: str | None = None, level: str | None = None) -> list[dict[str, Any]]:
-        with connect() as conn:
+        with connect_readonly() as conn:
             return list_attempts(conn, ["wrong", "partial"], entry_key, level)
 
     def attempts(
@@ -134,11 +134,11 @@ class JpnoteCore:
         entry_key: str | None = None,
         level: str | None = None,
     ) -> list[dict[str, Any]]:
-        with connect() as conn:
+        with connect_readonly() as conn:
             return list_attempts(conn, results, entry_key, level)
 
     def get_attempt(self, event_key: str) -> dict[str, Any] | None:
-        with connect() as conn:
+        with connect_readonly() as conn:
             return get_attempt(conn, event_key)
 
     def update_attempt(self, event_key: str, attempt: dict[str, Any]) -> dict[str, Any]:
@@ -154,7 +154,7 @@ class JpnoteCore:
         ).value
 
     def audit(self) -> list[dict[str, Any]]:
-        with connect() as conn:
+        with connect_readonly() as conn:
             return [issue.to_dict() for issue in run_audit(conn)]
 
     def repair(self) -> dict[str, Any]:
@@ -175,7 +175,7 @@ class JpnoteCore:
         return execute_safe_mutation("repair", operation).value
 
     def duplicates(self) -> list[dict[str, Any]]:
-        with connect() as conn:
+        with connect_readonly() as conn:
             return duplicate_candidates(conn)
 
     def merge(self, source_key: str, target_key: str) -> dict[str, Any]:
@@ -185,5 +185,5 @@ class JpnoteCore:
         ).value
 
     def stats(self) -> dict[str, Any]:
-        with connect() as conn:
+        with connect_readonly() as conn:
             return stats(conn)

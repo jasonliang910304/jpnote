@@ -1,6 +1,6 @@
 # jpnote 使用者操作手冊
 
-本手冊對應 jpnote v0.7.3 開發版。`jpnote --help` 提供精簡指令索引；`jpnote manual` 會輸出這份完整手冊，`jpnote manual --path` 會顯示手冊檔案位置。
+本手冊對應 jpnote v0.7.4 開發版。`jpnote --help` 提供精簡指令索引；`jpnote manual` 會輸出這份完整手冊，`jpnote manual --path` 會顯示手冊檔案位置。
 
 > 原則：任何會修改資料的操作都應先確認輸入與備份；`--check` 是真正 read-only 的預檢，不會建立、升級、修復或改寫實體資料庫。
 
@@ -22,7 +22,7 @@
 
 ```bash
 mkdir -p /tmp/jpnote-install
-tar -xzf jpnote-v0.7.3.tar.gz -C /tmp/jpnote-install --strip-components=1
+tar -xzf jpnote-v0.7.4.tar.gz -C /tmp/jpnote-install --strip-components=1
 /tmp/jpnote-install/install.sh
 rehash
 jpnote --version
@@ -190,7 +190,7 @@ jpnote import --stdin --check --yes --protocol 1 < import.json
 jpnote import --stdin --yes --protocol 1 --preflight-token TOKEN < import.json
 ```
 
-`--stdin` 不需要 `wl-paste`。它只改變文字輸入來源，之後仍和剪貼簿模式進入完全相同的 JSON 解析、schema 驗證、重複偵測、完整預檢、安全整理、確認、備份與正式匯入流程。
+`--stdin` 不需要 `wl-paste`。它只改變文字輸入來源，之後仍和剪貼簿模式進入完全相同的 JSON 解析、schema 驗證、重複偵測、完整預檢、安全整理、確認、備份與正式匯入流程。 v0.7.4 起，legacy `paste --stdin` 與 Wayland 剪貼簿也和正式 `import --stdin` 一樣採 strict UTF-8（可含 BOM）與 16 MiB hard limit；超過上限會在解析前拒絕。
 
 因為標準輸入已用來承載 JSON，正式 pipe／SSH 匯入應加 `--yes`；否則程式在讀完 JSON 後沒有剩餘 stdin 可回答確認提示。先用 `--check` 檢查，再用相同檔案搭配 `--yes` 正式匯入。
 

@@ -44,12 +44,15 @@ from .db import (
     create_recovery_snapshot,
     move_used_backup,
     restore_database_from,
+    validate_restore_candidate,
 )
 from .export_markdown import export_all
 from .fs_utils import atomic_write_text, ensure_private_dir
 from .import_resolution import resolve_import_plan
 from .import_source import ImportSource
 from .import_transport import (
+    MAX_IMPORT_BYTES,
+    decode_import_bytes,
     import_preflight_token,
     import_protocol_envelope,
     read_import_stdin,
@@ -62,7 +65,7 @@ from .import_preflight import (
     render_preflight_text,
 )
 from .models import ImportPlan
-from .mutations import execute_safe_mutation
+from .mutations import PostCommitExportError, execute_safe_mutation
 from .romaji_maintenance import romaji_audit_records, safe_romaji_candidates, apply_safe_romaji_normalization
 from .repository import (
     find_exact_entry,
@@ -181,17 +184,39 @@ def _resolve_entry_key(query: str | None, allow_fzf: bool = True) -> str | None:
 def _read_clipboard() -> str:
     if shutil.which("wl-paste") is None:
         raise RuntimeError("找不到 wl-paste；請使用 jpnote import FILE。")
-    result = subprocess.run(
-        ["wl-paste", "--no-newline"], text=True, capture_output=True, check=False
-    )
-    if result.returncode != 0:
-        raise RuntimeError(result.stderr.strip() or "無法讀取剪貼簿。")
-    return result.stdout
+    with tempfile.TemporaryFile() as stderr_file:
+        process = subprocess.Popen(
+            ["wl-paste", "--no-newline"],
+            stdout=subprocess.PIPE,
+            stderr=stderr_file,
+        )
+        try:
+            if process.stdout is None:
+                raise RuntimeError("無法取得 wl-paste 輸出。")
+            payload = process.stdout.read(MAX_IMPORT_BYTES + 1)
+            if len(payload) > MAX_IMPORT_BYTES:
+                process.kill()
+                process.wait()
+                raise ValueError(
+                    f"匯入資料超過大小上限 {MAX_IMPORT_BYTES} bytes；請拆分後再匯入。"
+                )
+            returncode = process.wait()
+        finally:
+            if process.stdout is not None:
+                process.stdout.close()
+            if process.poll() is None:
+                process.kill()
+                process.wait()
+        stderr_file.seek(0)
+        stderr = stderr_file.read(4096).decode("utf-8", errors="replace").strip()
+    if returncode != 0:
+        raise RuntimeError(stderr or "無法讀取剪貼簿。")
+    return decode_import_bytes(payload, source_label="剪貼簿")
 
 
 def _read_paste_input(args: argparse.Namespace) -> str:
     if args.stdin:
-        return sys.stdin.read()
+        return read_import_stdin()
     return _read_clipboard()
 
 
@@ -1548,6 +1573,11 @@ def command_undo(args: argparse.Namespace) -> int:
             return 1
         if not backup_integrity_ok(target):
             raise ValueError(f"指定 backup 已損壞，拒絕復原：{target.name}")
+        # Compatibility is checked before creating recovery-before-undo so an
+        # obviously unusable future/foreign backup has no filesystem side effect.
+        # restore_database_from() repeats the check against its exact private copy
+        # before replacing jpnote.db, which closes the external replacement race.
+        validate_restore_candidate(target)
         if args.backup is None and target != backups[0]:
             print(f"最新 backup 已損壞；改用較舊的有效 backup：{target.name}", file=sys.stderr)
 
@@ -1557,8 +1587,11 @@ def command_undo(args: argparse.Namespace) -> int:
         recovery = create_recovery_snapshot("before-undo")
         restore_database_from(target)
         used = move_used_backup(target)
-        with connect() as conn:
-            export_all(conn)
+        try:
+            with connect() as conn:
+                export_all(conn)
+        except (Exception, KeyboardInterrupt) as exc:
+            raise PostCommitExportError("undo", exc, recovery) from exc
     print(f"已復原：{used.name}")
     if recovery:
         print(f"復原前狀態：{recovery}")
@@ -1922,6 +1955,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _protocol_error_type(exc: BaseException) -> str:
+    if isinstance(exc, PostCommitExportError):
+        return "post_commit_export_error"
     if isinstance(exc, json.JSONDecodeError):
         return "invalid_json"
     if isinstance(exc, ValueError):
@@ -1952,6 +1987,14 @@ def main() -> int:
         return int(args.func(args))
     except (json.JSONDecodeError, ValueError, RuntimeError, OSError, sqlite3.Error) as exc:
         if _import_protocol_enabled(args):
+            extra: dict[str, Any] = {}
+            if isinstance(exc, PostCommitExportError):
+                extra = {
+                    "database_committed": True,
+                    "modified": True,
+                    "export_status": "failed",
+                    "backup": str(exc.backup or ""),
+                }
             _emit_import_protocol(
                 args,
                 ok=False,
@@ -1959,7 +2002,10 @@ def main() -> int:
                     "type": _protocol_error_type(exc),
                     "message": _protocol_error_message(exc),
                 },
+                **extra,
             )
+        elif isinstance(exc, PostCommitExportError):
+            print(f"警告：{exc}", file=sys.stderr)
         elif isinstance(exc, json.JSONDecodeError):
             print(
                 f"錯誤：JSON 第 {exc.lineno} 行、第 {exc.colno} 欄格式錯誤。",

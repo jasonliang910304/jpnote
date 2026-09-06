@@ -11,7 +11,7 @@ from typing import Any
 from .sorting import normalize_level
 from .attempt_options import normalized_options
 from .romaji_maintenance import normalize_import_romaji
-from .attempt_identity import generated_attempt_event_key
+from .attempt_identity import attempt_content_signature, generated_attempt_event_key
 from .relation_integrity import reciprocal_type
 
 VALID_ENTRY_TYPES = {"grammar", "vocabulary"}
@@ -453,7 +453,9 @@ def validate_attempt(attempt: dict[str, Any], default_source: str = "") -> dict[
         "parts": parts,
         "user_order": user_order,
         "correct_order": correct_order,
-        "linked_entries": list(dict.fromkeys(normalized_links)),
+        # linked_entries is a set-like relation at the public import boundary;
+        # canonicalize ordering so equivalent payloads normalize identically.
+        "linked_entries": sorted(dict.fromkeys(normalized_links)),
     }
     if not normalized["event_key"]:
         normalized["event_key"] = generated_attempt_event_key(normalized)
@@ -653,7 +655,7 @@ def normalize_payload(payload: dict[str, Any]) -> tuple[str, list[dict[str, Any]
         event_key = attempt["event_key"]
         existing = unique_attempts.get(event_key)
         if existing is not None:
-            if existing != attempt:
+            if attempt_content_signature(existing) != attempt_content_signature(attempt):
                 raise ValueError(
                     f"同批 attempts 使用相同 event_key 但內容不同：{event_key}"
                 )

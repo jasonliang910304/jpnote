@@ -1,10 +1,24 @@
-# jpnote v0.7.3
+# jpnote v0.7.4
 
 > **專案聲明**
 >
 > jpnote 的構想、功能需求、使用情境與開發方向由 **Jason Liang** 提供；本專案的所有程式碼均由 **OpenAI ChatGPT** 產生。Jason Liang 負責實際使用、測試、問題回報，以及功能與設計取捨。
 
 本版將原本 1,200 多行的單檔腳本拆成可重用的核心模組與可選介面層。
+
+## v0.7.4 Deep-audit correctness / safety
+
+v0.7.4 是 v0.7.3 Deep Adversarial Audit 後的 correctness/safety maintenance 版本；不修改 core schema v5、Quiz schema v2 或 public import JSON schema。
+
+- `undo`／restore 在替換正式 DB 前，會先以 private snapshot＋in-memory migration 驗證備份與目前 jpnote 相容；future schema、非 jpnote SQLite、migration 後仍不可用的結構會 fail closed。
+- `JpnoteCore` 的 list/search/browse/recent/get/attempt/audit/duplicates/stats 等純讀 API 全部使用真正 read-only connection；Quiz default source facade 因而不再透過 writable `connect()` 讀 core。
+- DB transaction 已 commit、但 Markdown refresh 失敗時，明確回報 `PostCommitExportError`；protocol 會標示 `database_committed=true`，避免把已成功的資料修改誤認成 rollback。
+- attempt 同 `event_key` 的 `linked_entries` 改為 canonical set-like ordering；同一組 links 的不同排列可安全去重。
+- reciprocal/inverse relation audit 改以 directed logical identity 去重，不再漏掉第二組反向關係。
+- 多個 incoming duplicate mapping 到同一 stable key 時使用 deterministic precedence；不再因 JSON item 順序不同而產生不同 scalar 結果。
+- legacy `jpnote paste` clipboard／`paste --stdin` 與正式 `import --stdin` 共用 16 MiB、strict UTF-8 boundary。parser 演算法本身的效能重構留到 v0.7.5。
+
+後續 v0.7.5 會集中處理 performance＋architecture cleanup，採「功能等價與安全契約優先」原則，再移除被新 bulk/snapshot 架構取代的舊路徑。
 
 ## v0.7.3 Stability foundation 與 recent UX
 
@@ -377,13 +391,13 @@ jpnote recent --format json           # 結構化輸出
 ## 安裝
 
 ```bash
-mkdir -p /tmp/jpnote-v0.7.3
+mkdir -p /tmp/jpnote-v0.7.4
 
-tar -xzf ~/Downloads/jpnote-v0.7.3.tar.gz \
-  -C /tmp/jpnote-v0.7.3 \
+tar -xzf ~/Downloads/jpnote-v0.7.4.tar.gz \
+  -C /tmp/jpnote-v0.7.4 \
   --strip-components=1
 
-/tmp/jpnote-v0.7.3/install.sh
+/tmp/jpnote-v0.7.4/install.sh
 jpnote init
 ```
 

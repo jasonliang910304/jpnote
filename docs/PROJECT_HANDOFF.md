@@ -1,9 +1,9 @@
 # jpnote 專案交接紀錄
 
-最後更新：2026-08-09（Asia/Taipei）
+最後更新：2026-09-06（Asia/Taipei）
 正式 release/tag：`jpnote v0.7.3`；annotated tag 固定指向 release commit `6dc8e8729c64c64933a7ff6d568b321b5cb26889`
-正式安裝版本：`jpnote 0.7.3`
-目前開發 checkpoint：v0.7.3 已正式發布；release commit `6dc8e8729c64c64933a7ff6d568b321b5cb26889` 的 Core regression 與 Windows import client CI 全綠，`v0.7.3` tag 已發布；下一步進 Quiz correctness／performance，之後做 mobile architecture spike
+正式安裝版本：`jpnote 0.7.4`（2026-09-06 local formal gate PASS；remote release/tag 尚待使用者完成）
+目前開發 checkpoint：v0.7.4 correctness/safety local release gate 已 PASS，actual repo working tree 尚未 commit。GitHub `main` 仍為 `851e77add870e2a19fcbe674860828ecccf81852`，`v0.7.4` tag 尚不存在；release commit/push/CI/tag 由使用者親手完成。AI 不修改 GitHub 遠端。
 
 用途：讓新的 ChatGPT 對話或新的開發工作階段，不依賴舊聊天內容也能直接接續工作。
 
@@ -166,57 +166,41 @@ Quiz history 不寫入既有教材 `attempts`。
 
 ---
 
-## 3. 下一個正確工作項目
+## 3. 目前正確工作項目
 
-### v0.7.3 stability + recent UX — release gate complete
+### v0.7.4 Deep Audit correctness / safety — local release gate PASS
 
-- parent baseline：`f429e39ef290247037ab5d1f99e7fdb6fc5d11a0`；core schema v5、Quiz schema v2、public import JSON schema 不變。
-- dev1 第一批只處理四個 safety foundation：revisioned/staged Linux installer＋rollback/path/concurrency guards、真正 read-only core DB path、explicit Quiz DB parent 權限、Linux core CI＋Python >= 3.10 gate。
-- read-only 範圍包含 list/browse/recent/search/stats/mistakes/attempt read/preview/audit/duplicates/romaji preview 與 backup listing；`init`、manual export、undo/mutation 仍走 writable connection。
-- installer v0.7.3 使用同版本 revisions＋atomic `current` activation；舊 revision 不在安裝成功後自動刪除，優先避免 rollback 資料誤刪。
-- GitHub core CI 預定在 Ubuntu 同時跑 Python 3.10／3.13 的 compileall、完整 pytest 與 isolated installer smoke；既有 Windows client CI 保留。
-- dev2 actual Arch gate 已通過：`455 passed, 18 subtests passed`；正式安裝已切到新的 0.7.3 revision，正式 DB hash／mtime／mode gate PASS。Windows PowerShell 5.1＋SSH 0.7.3 real gate 亦 PASS：install/reinstall、update-detail check、protocol、no-op import、來源刪除均通過。release tag 只在 push 後 Core／Windows CI 全綠時發布。
-- 詳細 audit／設計：`docs/audits/v0.7.3-stability-development.md`。
+parent baseline：`851e77add870e2a19fcbe674860828ecccf81852`（v0.7.3 release 後 final handoff main）。2026-09-06 actual Arch 已安裝並驗證 `jpnote 0.7.4`；GitHub 正式 release/tag 仍待使用者完成 release commit/push/CI/tag。
 
-### v0.7.2 release completion
+Deep Adversarial Audit 已完成：Blocking 0、High 1、Medium 16、Low–Medium 2，共 19 findings；沒有證據顯示正式學習 DB 已損壞。v0.7.4 先處理 correctness/safety，不把 performance architecture 與 UI 全塞進同一版。
 
-- actual Arch repository gate：`421 passed, 18 subtests passed`。
-- versioned isolated install／stdin protocol smoke：PASS。
-- 正式安裝 `jpnote 0.7.2`；安裝前後正式 DB SHA-256 相同；當次資料 486 entries／27 attempts，copy audit critical 0／needs_input 0。
-- Windows PowerShell 5.1＋既有 SSH alias `jpnote`：實機 check/import/source cleanup 通過，且後續兩日使用正常。
-- core schema v5、Quiz schema v2、public import JSON schema 均未變。
+目前 v0.7.4 candidate scope：
 
-### v0.7.2 後近期高優先／使用回饋
+1. restore/undo compatibility gate：future schema／foreign SQLite／migration 後不可用結構在 replace 前拒絕；restore 對 exact private copy 再驗一次，避免 precheck/path replacement race。
+2. `JpnoteCore` 純讀 API 改用 `connect_readonly()`，Quiz default read facade 一併 side-effect-free。
+3. post-commit Markdown export failure 以 `PostCommitExportError` 明確告知 DB 已提交；protocol additive 回報 `database_committed=true`。
+4. attempt 同 event key 的 linked-entry set semantics 與 batch duplicate comparison 統一。
+5. relation reciprocal/inverse audit 使用 directed logical identity。
+6. duplicate remap scalar merge deterministic；existing/explicit target 有明確 precedence，無 canonical 可判定時 fail closed。
+7. legacy paste clipboard/stdin 與正式 import 共用 16 MiB strict UTF-8 ingest boundary；parser 演算法效能留 v0.7.5。
 
-1. 有邊界的安全／穩定性 gate：優先檢查 atomic revisioned installer／真正 rollback、read-only command side effects、CI／版本相容、backup/undo/Quiz DB 權限與已知高風險 failure paths；通過後停止同規模廣域健檢。
-2. 匯入預檢更新明細：dev2 已實作。core preflight report 提供 `updates[]` 與 field-level `changes[]`；本機 `--check`／一般 import 內建 check 與 Windows `Test-JpnoteFile`／`Import-JpnoteFile` 共用同一 report，Windows 只呈現 core 回傳的變更文字。
-3. grammar romaji search：dev2 已實作；只從 grammar key/display/reading/aliases 的可靠 kana 片段衍生 search-only romaji token，不改 canonical/schema、不猜沒有讀音依據的漢字。
-4. Quiz 題數直接輸入：dev2 已實作。setup 題數列可直接鍵入 1–100（例如 50），Backspace 修正、Enter commit；0／超過上限 fail closed，題庫不足仍沿用既有 shortage confirmation。
-5. Quiz 是非題 presentation 改為 `○／×`；底層 `true／false` ID 維持不變，並同步即時回饋與 history。
-6. `reorder_4` 回饋顯示包含固定題幹的完整句子；可重組片段使用 ANSI 高亮，並提供 `NO_COLOR` fallback。
-7. 單字意思題降低漢字洩題；假名 prompt 必須排除所有同讀音詞條的意思，確保唯一答案。
-8. 手機 Quiz 介面架構 spike：SSH/TUI 僅作臨時／備援，優先評估 Tailscale-only Web／PWA、受限 API、認證、session／斷線恢復與多裝置安全邊界。
-9. Quiz 啟動效能／動態 loading、TUI history polish 與 grammar 詳細頁 hanging indent。
+此 candidate 不修改 core schema v5、Quiz schema v2 或 public import JSON schema。
 
-### 一般優先
+Assistant-side clean-apply gate 已完成：patch 由 exact `851e77...` baseline 產生，並在另一份由 v0.7.3 bundle 重建的 clean checkout 通過 `git apply --check`、actual apply、`git diff --check`、compileall、shell syntax、targeted regressions與 isolated installer regressions；完整 collection 485 tests，分段 exhaustive run 為 484 passed、1 skipped（assistant 環境無 real fzf）、36 subtests passed。
 
-8. 單字意思題降低漢字洩題；改用假名 prompt 時必須排除所有同讀音詞條的意思，確保選項只有一個可能正解。無法保證唯一答案時 fallback 顯示漢字、改題型或跳過。
-9. fuzzy duplicate candidate／確認流程改善。
-10. AI context 精簡匯出流程。
-11. `grammar_combinations` 等結構化搭配資訊。
-12. romaji 分隔與外來語語源欄位改善。
-13. fzf 多選、未分類顯示與 mistake level 空值處理。
-14. multi-writer busy timeout/retry/serialization 與 attempt identity index optimization。
+2026-09-06 actual Arch gate 亦已完成：一次性 `pytest -q` 為 `485 passed, 36 subtests passed`，real-fzf integration 也 PASS。正式 0.7.3 → 0.7.4 install、version/help/manual/Quiz-help、isolated installed protocol import、quick_check／foreign_key_check 全 PASS；正式 DB fingerprint（SHA-256 `7bf1bd5b0f45eb7c67fe665573a900ddd2e89f31a272a09f2ee17b4a47b0f182`、size 1486848、mtime、mode）安裝前後完全不變。真實 DB 副本 stats：1019 items（150 grammar／869 vocabulary）、27 attempts；audit 29 review、0 critical；Quiz planning 869 vocabulary sources／27 attempt sources、available 4764、selected 10。
 
-### 低優先／不阻塞正常 Quiz
+下一步只剩使用者控制的 Git release 流程：final docs patch → release commit → push main → CI PASS → annotated `v0.7.4` tag/push；完成後再做 handoff-only documentation sync。
 
-15. optional negative scoring／guess penalty。
-16. response timing、streak、familiarity、spaced repetition。
-17. radar chart／長期趨勢。
+### v0.7.5+ 已整合 roadmap
 
-除非出現 blocking regression，不要重新啟動同規模 release audit；以針對性測試與一般維護為主。
+- v0.7.5：Performance & Architecture Cleanup。功能等價/資料安全優先；shared snapshot/bulk hydration、attempt identity index、Quiz O(N²)/重複 hydration、export/preflight N+1、parser、fzf performance，並清除被新架構取代且可證明安全移除的 dead/obsolete code。若過大可拆 0.7.5.1/2/3/4，每個 checkpoint 都必須獨立可正常使用。
+- v0.7.6：grammar romaji exact/ranking、core/fzf matcher 一致、Quiz `○／×`、`reorder_4` 完整句、history UI、grammar hanging indent 等 correctness/UI。現有 homophone guard 已有基本實作，只保留強化/regression。
+- v0.7.7：parent-directory fsync、installer SIGKILL/stale lock、symlink chmod ownership、Windows CI trigger、Actions/dependency provenance、其他 storage hardening。
+- v0.8.0：Tailscale-only Web/PWA/mobile architecture spike，再決定受限 API、認證、session/斷線、多裝置 concurrency 與 mimir 角色。
+- v0.8.x+：grammar combinations、AI context、romaji/origin 呈現、SRS/timing/趨勢等學習功能。
 
----
+詳細順序以 `docs/ROADMAP.md` 為準。
 
 ## 4. 日常資料匯入與開發並行規則
 
@@ -249,15 +233,12 @@ jpnote browse
 
 ## 5. 已知 backlog
 
-完整順序以第 3 節為準；摘要如下：
+完整 backlog 已去重並整合到 `docs/ROADMAP.md` 的 v0.7.4 → v0.8.x 排程。特別注意：
 
-- 已完成 maintenance：installed fzf helper path isolation、Quiz 開始前準備畫面與 batch session insert；v0.7.2 post-release CI 三個 jobs 已全綠。
-- 高優先：是非題 `○／×`、重組完整句子／高亮、history export/delete、TUI polish、release/install 自動化。
-- 一般優先：單字漢字洩題與同音詞唯一答案、fuzzy candidate、AI context、grammar combinations、romaji／語源、fzf／未分類／mistake level、多 writer／identity index。
-- 低優先：負分制、response timing、streak、familiarity、spaced repetition、radar chart／長期趨勢。
-- `paste --file PATH` 非必要；現有 `jpnote import FILE` 已提供檔案輸入，只有在能保持介面簡潔時才增加 alias。
-
----
+- 不再把已完成的 atomic/revisioned installer、read-only connection helper、basic homophone guard、Quiz numeric count、static loading hint、session batch insert、writer serialization foundation 等舊資料重新列為待辦。
+- performance findings 必須在 v0.7.5 以共用 architecture 解決，不以零散 query 微調取代 root-cause cleanup。
+- dead code cleanup 僅在 caller 遷移與 contract/equivalence test 後進行；migration/public API/installer fallback 等 compatibility-sensitive 路徑需有保留理由或明確 deprecation。
+- Deep Audit 其餘 durability/hardening findings照 v0.7.7 排程，不因沒有 Blocking 就遺忘。
 
 ## 6. 每個 checkpoint 與 release 的紀錄規則
 

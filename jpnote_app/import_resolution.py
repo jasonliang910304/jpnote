@@ -16,6 +16,79 @@ from .services import detect_duplicate_warnings
 from .validation import merge_normalized_items
 
 
+RESOLUTION_SCALAR_FIELDS = (
+    "display", "reading", "romaji", "accent", "accent_type", "accent_display",
+    "accent_note", "level", "review_group", "origin_type", "origin_language",
+    "origin_word", "origin_note", "source",
+)
+
+
+def _finalize_resolution_scalars(
+    *,
+    target_key: str,
+    merged: dict[str, Any],
+    members: list[tuple[str, dict[str, Any]]],
+    target_item: dict[str, Any] | None,
+    existing: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Make remap results independent from incoming item order.
+
+    The explicit incoming target wins first.  Otherwise mapped sources may
+    update the target when they agree; if they disagree, an existing target value
+    is authoritative and an empty target fails closed.
+    """
+    result = dict(merged)
+    contributors = [item for source_key, item in members if source_key != target_key]
+    target_item = target_item or {}
+    existing = existing or {}
+
+    for field in RESOLUTION_SCALAR_FIELDS:
+        explicit_target_value = str(target_item.get(field) or "")
+        contributor_values = {
+            str(item.get(field) or "")
+            for item in contributors
+            if str(item.get(field) or "")
+        }
+        existing_value = str(existing.get(field) or "")
+        if explicit_target_value:
+            # An item whose stable key already is the target is the clearest
+            # expression of the caller's intended canonical value.
+            result[field] = explicit_target_value
+        elif len(contributor_values) == 1:
+            # Preserve the long-standing one-source remap behavior: an
+            # explicitly mapped incoming item may update the existing target.
+            # Multiple mapped sources may do so when they agree.
+            result[field] = next(iter(contributor_values))
+        elif len(contributor_values) > 1 and existing_value:
+            # Several mapped variants disagree, so the already-established
+            # target value is the only deterministic canonical choice.
+            result[field] = existing_value
+        elif len(contributor_values) > 1:
+            raise ValueError(
+                "多個項目映射到同一 stable key 時欄位內容衝突："
+                f"{target_key} 的 {field} 同時出現 {sorted(contributor_values)!r}。"
+            )
+        else:
+            result[field] = existing_value
+
+    aliases = list(result.get("aliases", []))
+    existing_display = str(existing.get("display") or "")
+    if existing_display and existing_display != result["display"]:
+        aliases.append(existing_display)
+    for _source_key, item in members:
+        display = str(item.get("display") or "")
+        if display and display != result["display"]:
+            aliases.append(display)
+    result["aliases"] = list(
+        dict.fromkeys(
+            alias
+            for alias in aliases
+            if alias and alias != str(result.get("display") or "")
+        )
+    )
+    return result
+
+
 def _resolve_mapping(key: str, mapping: dict[str, str]) -> str:
     """Resolve mapping chains while rejecting cycles."""
     current = key
@@ -67,8 +140,8 @@ def resolve_import_plan(
     def mapped(key: str) -> str:
         return resolved_map.get(key, key)
 
-    merged_by_key: dict[str, dict[str, Any]] = {}
-    order: list[str] = []
+    grouped: dict[str, list[tuple[str, dict[str, Any]]]] = {}
+    target_order: list[str] = []
     for original in plan.items:
         source_key = original["key"]
         if source_key in skipped:
@@ -77,14 +150,6 @@ def resolve_import_plan(
         item = dict(original)
         item["key"] = target_key
 
-        # When an incoming kanji spelling replaces an existing kana display,
-        # retain the old display as an alias before upsert changes it.
-        existing = get_entry(conn, target_key, include_attempts=False)
-        aliases = list(item.get("aliases", []))
-        if existing and existing.get("display") and existing["display"] != item.get("display"):
-            aliases.append(existing["display"])
-        item["aliases"] = list(dict.fromkeys(alias for alias in aliases if alias))
-
         relations: list[dict[str, str]] = []
         for relation in item.get("related_grammar", []):
             rewritten = dict(relation)
@@ -92,14 +157,40 @@ def resolve_import_plan(
             if rewritten["key"] != target_key:
                 relations.append(rewritten)
         item["related_grammar"] = relations
+        if target_key not in grouped:
+            grouped[target_key] = []
+            target_order.append(target_key)
+        grouped[target_key].append((source_key, item))
 
-        if target_key in merged_by_key:
-            merged_by_key[target_key] = merge_normalized_items(merged_by_key[target_key], item, allow_identity_override=True)
-        else:
-            merged_by_key[target_key] = item
-            order.append(target_key)
+    merged_by_key: dict[str, dict[str, Any]] = {}
+    for target_key in target_order:
+        members = sorted(
+            grouped[target_key],
+            key=lambda member: (member[0] != target_key, member[0]),
+        )
+        merged: dict[str, Any] | None = None
+        for _source_key, item in members:
+            if merged is None:
+                merged = item
+            else:
+                merged = merge_normalized_items(
+                    merged, item, allow_identity_override=True
+                )
+        assert merged is not None
+        target_item = next(
+            (item for source_key, item in members if source_key == target_key),
+            None,
+        )
+        existing = get_entry(conn, target_key, include_attempts=False)
+        merged_by_key[target_key] = _finalize_resolution_scalars(
+            target_key=target_key,
+            merged=merged,
+            members=members,
+            target_item=target_item,
+            existing=existing,
+        )
 
-    items = [merged_by_key[key] for key in order]
+    items = [merged_by_key[key] for key in target_order]
     available = {
         row["key"] for row in conn.execute("SELECT key FROM entries").fetchall()
     } | set(merged_by_key)

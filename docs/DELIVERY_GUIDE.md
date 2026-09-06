@@ -1,8 +1,15 @@
 # jpnote 交付檔案分類規則
 
-最後更新：2026-07-24
+最後更新：2026-09-06
 
 之後每次回覆都固定分成下列三類，避免檔案越堆越多卻不知道用途。
+
+## GitHub 寫入邊界
+
+- AI 對 GitHub 只做 read-only 查詢；不得建立／移動／刪除 branch/tag、commit/push、建立 PR、修改遠端檔案或操作 workflow。
+- AI 在 exact baseline 的隔離 checkout 內準備 patch、測試與文件，完成 `git apply --check`＋clean-checkout actual apply 後才交付。
+- 使用者親手把 patch 套到正式 repository，確認 gate 後自行 commit／push／tag。
+- 儘量把可安全合併的修改整理成一次套用與一次 push；不要用 GitHub 遠端反覆提交實驗性小修來當測試環境。
 
 ## 1. 必須下載
 

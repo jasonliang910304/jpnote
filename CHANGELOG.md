@@ -1,4 +1,16 @@
 # Changelog
+## 0.7.4 — 2026-09-06
+
+- Deep Adversarial Audit correctness/safety remediation：restore/undo 在正式 DB replace 前加入 side-effect-free compatibility gate，並在 copy 後重新驗證 exact private snapshot；future schema、foreign SQLite 與 migration 後仍不可用的結構不再能覆蓋正式 DB。
+- `JpnoteCore` 純讀 API 全面改用 `connect_readonly()`；future Web facade 與 Quiz default source read 不再因讀取觸發正式 DB migration、pending recovery、backup prune 或 chmod。
+- DB commit 後 Markdown export failure 改為明確 `PostCommitExportError`；Windows/import protocol 以 additive fields 回報 `database_committed=true`／`export_status=failed`，來源 cleanup 不會在失敗路徑執行。
+- attempt batch duplicate 判定共用 canonical content signature，`linked_entries` 在 public import boundary 排序去重；不同排列不再誤報同 event_key 衝突。
+- relation reciprocal audit 改用 directed logical pair marker，修正 inverse relation false negative。
+- duplicate key mapping 改為 deterministic target-first precedence；多來源衝突時 existing target 值為 canonical，target 空值且來源互相衝突時 fail closed。
+- `jpnote paste` clipboard 與 `paste --stdin` 補上與正式 stdin import 相同的 16 MiB／strict UTF-8 boundary。超線性 parser 本身留待 v0.7.5 architecture/performance batch。
+- source version／installer 更新為 0.7.4；core schema 維持 v5、Quiz schema 維持 v2、public import JSON schema 不變。
+- actual Arch source gate：`485 passed, 36 subtests passed`（含 real-fzf integration）；正式 0.7.3 → 0.7.4 安裝 gate PASS。正式 DB 在安裝前後 SHA-256／size／mtime／mode 完全不變；真實 DB 副本為 1019 items（150 grammar／869 vocabulary）、27 attempts，audit 為 29 review、無 critical。installed protocol import、SQLite quick_check／foreign_key_check 與 read-only Quiz planning 皆 PASS。
+
 ## 0.7.3 — 2026-08-09
 
 - Linux installer 改為 revisioned staged install 與 atomic `current` activation；加入 installer lock、target/revision/symlink guards、launcher/revision rollback，並在任何 install-tree mutation 前拒絕 Python < 3.10。

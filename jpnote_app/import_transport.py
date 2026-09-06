@@ -12,6 +12,27 @@ IMPORT_PROTOCOL_VERSION = 1
 MAX_IMPORT_BYTES = 16 * 1024 * 1024
 
 
+def decode_import_bytes(
+    payload: bytes,
+    *,
+    source_label: str,
+    max_bytes: int = MAX_IMPORT_BYTES,
+) -> str:
+    """Decode one bounded UTF-8 import payload from any byte source."""
+    if max_bytes <= 0:
+        raise ValueError("import 大小上限必須大於 0。")
+    if len(payload) > max_bytes:
+        raise ValueError(
+            f"匯入資料超過大小上限 {max_bytes} bytes；請拆分後再匯入。"
+        )
+    try:
+        return payload.decode("utf-8-sig", errors="strict")
+    except UnicodeDecodeError as exc:
+        raise ValueError(
+            f"{source_label}不是有效 UTF-8（byte {exc.start}）。"
+        ) from exc
+
+
 def read_import_stdin(
     stream: TextIO | None = None,
     *,
@@ -28,25 +49,14 @@ def read_import_stdin(
 
     source = sys.stdin if stream is None else stream
     binary: BinaryIO | None = getattr(source, "buffer", None)
-
     if binary is not None:
         payload = binary.read(max_bytes + 1)
     else:
         text = source.read(max_bytes + 1)
         payload = text.encode("utf-8")
-
-    if len(payload) > max_bytes:
-        raise ValueError(
-            f"匯入資料超過大小上限 {max_bytes} bytes；請拆分後再匯入。"
-        )
-
-    try:
-        # utf-8-sig accepts ordinary UTF-8 and removes one optional BOM.
-        return payload.decode("utf-8-sig", errors="strict")
-    except UnicodeDecodeError as exc:
-        raise ValueError(
-            f"標準輸入不是有效 UTF-8（byte {exc.start}）。"
-        ) from exc
+    return decode_import_bytes(
+        payload, source_label="標準輸入", max_bytes=max_bytes
+    )
 
 
 def import_protocol_envelope(

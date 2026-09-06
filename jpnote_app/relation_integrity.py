@@ -269,12 +269,22 @@ def relation_integrity_issues(conn: sqlite3.Connection) -> list[dict[str, Any]]:
 
     # Reciprocal integrity applies only to resolved relations.
     rows = conn.execute("SELECT * FROM grammar_relations ORDER BY id").fetchall()
-    seen_pairs: set[tuple[str, str, str, str]] = set()
+    seen_pairs: set[tuple[tuple[str, str, str], tuple[str, str, str]]] = set()
     for row in rows:
         reciprocal = reciprocal_type(str(row["relation_type"] or ""))
         if reciprocal is None:
             continue
-        marker = tuple(sorted((str(row["source_key"]), str(row["target_key"])))) + tuple(sorted((str(row["relation_type"]), reciprocal)))
+        identity = (
+            str(row["source_key"]),
+            str(row["target_key"]),
+            str(row["relation_type"]),
+        )
+        opposite_identity = (
+            str(row["target_key"]),
+            str(row["source_key"]),
+            reciprocal,
+        )
+        marker = tuple(sorted((identity, opposite_identity)))
         if marker in seen_pairs:
             continue
         seen_pairs.add(marker)
