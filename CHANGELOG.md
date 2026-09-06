@@ -10,6 +10,7 @@
 - `jpnote paste` clipboard 與 `paste --stdin` 補上與正式 stdin import 相同的 16 MiB／strict UTF-8 boundary。超線性 parser 本身留待 v0.7.5 architecture/performance batch。
 - source version／installer 更新為 0.7.4；core schema 維持 v5、Quiz schema 維持 v2、public import JSON schema 不變。
 - actual Arch source gate：`485 passed, 36 subtests passed`（含 real-fzf integration）；正式 0.7.3 → 0.7.4 安裝 gate PASS。正式 DB 在安裝前後 SHA-256／size／mtime／mode 完全不變；真實 DB 副本為 1019 items（150 grammar／869 vocabulary）、27 attempts，audit 為 29 review、無 critical。installed protocol import、SQLite quick_check／foreign_key_check 與 read-only Quiz planning 皆 PASS。
+- release commit `d6c847180e466439560769d1567048f7b382a4fb` 已 push；release-commit 與 annotated `v0.7.4` tag-triggered Core regression／Windows import client CI 全綠。`v0.7.4` 固定指向該 release commit，release 後僅做 handoff-only documentation sync。
 
 ## 0.7.3 — 2026-08-09
 

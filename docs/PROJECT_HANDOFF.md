@@ -1,15 +1,29 @@
 # jpnote 專案交接紀錄
 
 最後更新：2026-09-06（Asia/Taipei）
-正式 release/tag：`jpnote v0.7.3`；annotated tag 固定指向 release commit `6dc8e8729c64c64933a7ff6d568b321b5cb26889`
-正式安裝版本：`jpnote 0.7.4`（2026-09-06 local formal gate PASS；remote release/tag 尚待使用者完成）
-目前開發 checkpoint：v0.7.4 correctness/safety local release gate 已 PASS，actual repo working tree 尚未 commit。GitHub `main` 仍為 `851e77add870e2a19fcbe674860828ecccf81852`，`v0.7.4` tag 尚不存在；release commit/push/CI/tag 由使用者親手完成。AI 不修改 GitHub 遠端。
+正式 release/tag：`jpnote v0.7.4`；annotated tag 固定指向 release commit `d6c847180e466439560769d1567048f7b382a4fb`
+正式安裝版本：`jpnote 0.7.4`（2026-09-06 actual Arch formal gate PASS）
+目前開發 checkpoint：v0.7.4 correctness/safety release 已完成；release commit、`main` push、branch CI、annotated tag 與 tag-triggered CI 全部 PASS。此文件為 release 後 handoff-only sync；`v0.7.4` tag 不移動。下一個 runtime 工作是 v0.7.5 Performance & Architecture Cleanup。AI 不修改 GitHub 遠端。
 
 用途：讓新的 ChatGPT 對話或新的開發工作階段，不依賴舊聊天內容也能直接接續工作。
 
 ---
 
 ## 1. 目前可信基準
+
+### 2026-09-06 v0.7.4 release baseline
+
+```text
+branch=main
+release commit=d6c847180e466439560769d1567048f7b382a4fb
+v0.7.4^{}=d6c847180e466439560769d1567048f7b382a4fb
+release tag object=1c0cebf3a9d38e16b7027fd77e6f8a59c649efd6
+post-release main=release commit + handoff-only documentation sync
+working tree=clean after handoff commit
+CI=release-commit Core regression PASS；Windows import client PASS；tag-triggered Core regression PASS；Windows import client PASS
+```
+
+Actual Arch release gate：`485 passed, 36 subtests passed`；0.7.3 → 0.7.4 installed upgrade PASS；正式 DB 安裝前後 SHA-256／size／mtime／mode 完全不變。真實 DB 副本 1019 items（150 grammar／869 vocabulary）、27 attempts，audit 29 review／0 critical；read-only Quiz planning、installed protocol import、SQLite quick_check／foreign_key_check 全部 PASS。
 
 ### 2026-08-09 v0.7.3 release baseline
 
@@ -63,9 +77,9 @@ working tree=clean
 ### 正式 release
 
 - branch：`main`
-- release tag：`v0.7.3`
+- release tag：`v0.7.4` → `d6c847180e466439560769d1567048f7b382a4fb`
 - core SQLite schema：`5`
-- public import JSON schema：維持相容；v0.7.3 未新增欄位
+- public import JSON schema：維持相容；v0.7.4 未新增欄位
 - v0.7.0 release gate：通過
 - post-release 功能 commit：`a660950`（是非題回饋標籤釐清）、`74fb82a`（`jpnote paste --stdin`）
 - 最新 maintenance checkpoint：installed fzf helper 以 isolated bootstrap 啟動；Quiz 開始前立即顯示準備畫面，session 題目寫入改用 batch insert。
@@ -168,13 +182,13 @@ Quiz history 不寫入既有教材 `attempts`。
 
 ## 3. 目前正確工作項目
 
-### v0.7.4 Deep Audit correctness / safety — local release gate PASS
+### v0.7.4 Deep Audit correctness / safety — released
 
-parent baseline：`851e77add870e2a19fcbe674860828ecccf81852`（v0.7.3 release 後 final handoff main）。2026-09-06 actual Arch 已安裝並驗證 `jpnote 0.7.4`；GitHub 正式 release/tag 仍待使用者完成 release commit/push/CI/tag。
+parent baseline：`851e77add870e2a19fcbe674860828ecccf81852`（v0.7.3 release 後 final handoff main）。release commit：`d6c847180e466439560769d1567048f7b382a4fb`；annotated `v0.7.4` 固定指向該 commit。2026-09-06 actual Arch 正式 install/data gate、release-commit CI 與 tag-triggered CI 全部 PASS。
 
 Deep Adversarial Audit 已完成：Blocking 0、High 1、Medium 16、Low–Medium 2，共 19 findings；沒有證據顯示正式學習 DB 已損壞。v0.7.4 先處理 correctness/safety，不把 performance architecture 與 UI 全塞進同一版。
 
-目前 v0.7.4 candidate scope：
+v0.7.4 completed scope：
 
 1. restore/undo compatibility gate：future schema／foreign SQLite／migration 後不可用結構在 replace 前拒絕；restore 對 exact private copy 再驗一次，避免 precheck/path replacement race。
 2. `JpnoteCore` 純讀 API 改用 `connect_readonly()`，Quiz default read facade 一併 side-effect-free。
@@ -184,13 +198,13 @@ Deep Adversarial Audit 已完成：Blocking 0、High 1、Medium 16、Low–Mediu
 6. duplicate remap scalar merge deterministic；existing/explicit target 有明確 precedence，無 canonical 可判定時 fail closed。
 7. legacy paste clipboard/stdin 與正式 import 共用 16 MiB strict UTF-8 ingest boundary；parser 演算法效能留 v0.7.5。
 
-此 candidate 不修改 core schema v5、Quiz schema v2 或 public import JSON schema。
+此 release 不修改 core schema v5、Quiz schema v2 或 public import JSON schema。
 
 Assistant-side clean-apply gate 已完成：patch 由 exact `851e77...` baseline 產生，並在另一份由 v0.7.3 bundle 重建的 clean checkout 通過 `git apply --check`、actual apply、`git diff --check`、compileall、shell syntax、targeted regressions與 isolated installer regressions；完整 collection 485 tests，分段 exhaustive run 為 484 passed、1 skipped（assistant 環境無 real fzf）、36 subtests passed。
 
 2026-09-06 actual Arch gate 亦已完成：一次性 `pytest -q` 為 `485 passed, 36 subtests passed`，real-fzf integration 也 PASS。正式 0.7.3 → 0.7.4 install、version/help/manual/Quiz-help、isolated installed protocol import、quick_check／foreign_key_check 全 PASS；正式 DB fingerprint（SHA-256 `7bf1bd5b0f45eb7c67fe665573a900ddd2e89f31a272a09f2ee17b4a47b0f182`、size 1486848、mtime、mode）安裝前後完全不變。真實 DB 副本 stats：1019 items（150 grammar／869 vocabulary）、27 attempts；audit 29 review、0 critical；Quiz planning 869 vocabulary sources／27 attempt sources、available 4764、selected 10。
 
-下一步只剩使用者控制的 Git release 流程：final docs patch → release commit → push main → CI PASS → annotated `v0.7.4` tag/push；完成後再做 handoff-only documentation sync。
+GitHub release 流程已完成；release 後只做 handoff-only documentation sync，`v0.7.4` tag 不移動。下一個 runtime 工作直接進 v0.7.5 Performance & Architecture Cleanup。
 
 ### v0.7.5+ 已整合 roadmap
 

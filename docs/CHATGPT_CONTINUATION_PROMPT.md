@@ -14,15 +14,15 @@
 
 ## 目前基準
 
-- 正式 release/tag：`jpnote v0.7.3`；annotated tag 固定指向 release commit `6dc8e8729c64c64933a7ff6d568b321b5cb26889`
-- 正式安裝版本：`jpnote 0.7.4`（actual Arch local formal gate PASS；GitHub release/tag 尚待完成）
-- v0.7.3 release 後 final main／v0.7.4 parent：`851e77add870e2a19fcbe674860828ecccf81852`
-- 目前 source target：`0.7.4` correctness/safety local release gate PASS；actual repo 尚未 commit；GitHub release/tag 尚未變更
+- 正式 release/tag：`jpnote v0.7.4`；annotated tag 固定指向 release commit `d6c847180e466439560769d1567048f7b382a4fb`（tag object `1c0cebf3a9d38e16b7027fd77e6f8a59c649efd6`）
+- 正式安裝版本：`jpnote 0.7.4`（actual Arch formal gate PASS）
+- v0.7.4 parent／v0.7.3 final main：`851e77add870e2a19fcbe674860828ecccf81852`
+- 目前 source baseline：v0.7.4 release 已完成；release 後只做 handoff-only documentation sync，`v0.7.4` tag 不移動；下一個 runtime target 是 v0.7.5 Performance & Architecture Cleanup
 - GitHub write policy：AI 不做 branch/commit/push/tag/PR/workflow 等遠端變更；GitHub 僅 read-only。AI 在隔離環境準備/驗證 patch，所有 GitHub 寫入由使用者親手完成
 - core SQLite schema：v5
 - Quiz SQLite：獨立 `quiz.db`，schema v2
 - v0.7.3 release gate：dev1 safety PASS；dev2 actual Arch PASS（455 passed, 18 subtests passed）；Windows PowerShell 5.1＋SSH real gate PASS；release-commit Core regression／Windows import client CI 全綠
-- v0.7.4 local gate（2026-09-06）：actual Arch `485 passed, 36 subtests passed`；0.7.3 → 0.7.4 正式安裝 PASS；正式 DB SHA-256/size/mtime/mode 不變；real DB copy 1019 items（150 grammar／869 vocabulary）、27 attempts、audit 29 review/0 critical；read-only Quiz planning與 installed protocol import/quick/FK smoke PASS。release commit/push/CI/tag 尚待使用者完成。
+- v0.7.4 release gate（2026-09-06）：actual Arch `485 passed, 36 subtests passed`；0.7.3 → 0.7.4 正式安裝 PASS；正式 DB SHA-256/size/mtime/mode 不變；real DB copy 1019 items（150 grammar／869 vocabulary）、27 attempts、audit 29 review/0 critical；read-only Quiz planning 與 installed protocol import/quick/FK smoke PASS。release commit `d6c8471...` 已 push；release-commit 與 tag-triggered Core regression／Windows import client CI 全綠；annotated `v0.7.4` 已建立並固定指向 release commit。
 - Quiz 開發已完成 Phase 1–4，以及 Phase 5 TUI、usability/question-quality、正式 CLI/config、互動式 filters/history navigation、history 逐題檢視與隔離安裝 smoke
 - v0.7.1 最新完整測試：`401 passed, 18 subtests passed`；targeted `16 passed`
 - app-only coverage：`76%`
@@ -43,7 +43,7 @@ git status
 git fetch --tags origin
 git rev-parse --short HEAD
 git rev-parse --short origin/main
-git rev-parse --short 'v0.7.3^{}'
+git rev-parse --short 'v0.7.4^{}'
 git diff --check
 jpnote --version
 ```
@@ -98,7 +98,7 @@ jpnote --version
 
 ## 下一個正確工作項目
 
-Deep Adversarial Audit 已完成（Blocking 0 / High 1 / Medium 16 / Low–Medium 2；19 findings）。v0.7.4 correctness/safety 已完成 local gate；目前不要再改 runtime scope，下一步是使用者控制的 release commit → push → CI → annotated tag，之後再做 final handoff-only docs sync。
+Deep Adversarial Audit 已完成（Blocking 0 / High 1 / Medium 16 / Low–Medium 2；19 findings），v0.7.4 correctness/safety release 亦已正式完成。不要再修改或移動 `v0.7.4` tag；下一個 runtime 工作直接進 v0.7.5 Performance & Architecture Cleanup。
 
 後續固定排程：
 

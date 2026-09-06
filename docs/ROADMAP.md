@@ -1,9 +1,9 @@
 # jpnote 開發路線圖
 
 最後更新：2026-09-06（Asia/Taipei）
-正式 release/tag：v0.7.3；annotated tag 固定指向 release commit `6dc8e8729c64c64933a7ff6d568b321b5cb26889`
-正式安裝版本：0.7.4（local formal gate PASS；GitHub release/tag pending）
-目前開發位置：v0.7.4 correctness/safety local release gate 已 PASS；actual repo 尚未 commit，GitHub `main`/tag 仍在 v0.7.3 baseline。GitHub 遠端變更一律由使用者親手處理；AI 僅做 read-only GitHub 查詢、隔離修改、測試與 patch 準備。
+正式 release/tag：v0.7.4；annotated tag 固定指向 release commit `d6c847180e466439560769d1567048f7b382a4fb`
+正式安裝版本：0.7.4（actual Arch formal gate PASS）
+目前開發位置：v0.7.4 correctness/safety release 已完成；release-commit 與 tag-triggered Core regression／Windows import client CI 全綠。release 後僅做 handoff-only docs sync，`v0.7.4` tag 不移動；下一個 runtime 工作為 v0.7.5 Performance & Architecture Cleanup。GitHub 遠端變更一律由使用者親手處理；AI 僅做 read-only GitHub 查詢、隔離修改、測試與 patch 準備。
 
 ## 0.7.2 高優先主軸 — completed
 
@@ -72,7 +72,7 @@
 6. duplicate remap scalar merge 改為 deterministic precedence；有歧義時 fail closed。
 7. legacy paste clipboard／stdin 統一 16 MiB strict UTF-8 ingest boundary；parser 演算法效能改善留到 v0.7.5。
 
-完成 gate：上述反例已在 v0.7.3 baseline 重現並於 v0.7.4 candidate 消失；assistant clean-apply exhaustive gate PASS，actual Arch full regression `485 passed, 36 subtests passed`，0.7.3 → 0.7.4 正式 install 與 formal DB fingerprint immutability gate PASS。core schema v5、Quiz schema v2、public import JSON schema 均維持不變。GitHub release commit/push/CI/tag 仍待使用者完成。
+完成 gate：上述反例已在 v0.7.3 baseline 重現並於 v0.7.4 candidate 消失；assistant clean-apply exhaustive gate PASS，actual Arch full regression `485 passed, 36 subtests passed`，0.7.3 → 0.7.4 正式 install 與 formal DB fingerprint immutability gate PASS。release commit `d6c847180e466439560769d1567048f7b382a4fb` 已 push，release-commit 與 tag-triggered Core regression／Windows import client CI 全綠；annotated `v0.7.4` 固定指向該 commit。core schema v5、Quiz schema v2、public import JSON schema 均維持不變。
 
 ## v0.7.5 — Performance & Architecture Cleanup
 
