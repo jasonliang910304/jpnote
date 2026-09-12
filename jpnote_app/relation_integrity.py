@@ -238,37 +238,51 @@ def _safe_note(rows: list[sqlite3.Row]) -> str | None:
 def relation_integrity_issues(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     """Return relation legacy/integrity issues without modifying data."""
     issues: list[dict[str, Any]] = []
+    rows_by_table: dict[str, list[sqlite3.Row]] = {
+        table: conn.execute(f"SELECT * FROM {table} ORDER BY id").fetchall()
+        for table in ("grammar_relations", "pending_grammar_relations")
+    }
+    groups_by_table: dict[
+        str, dict[tuple[str, str, str], list[sqlite3.Row]]
+    ] = {}
     for table in ("grammar_relations", "pending_grammar_relations"):
-        groups = conn.execute(
-            f"""SELECT source_key, target_key, relation_type, COUNT(*) AS n
-                FROM {table}
-                GROUP BY source_key, target_key, relation_type
-                HAVING COUNT(*) > 1"""
-        ).fetchall()
-        for group in groups:
-            rows = _rows_for_identity(
-                conn, table, group["source_key"], group["target_key"], group["relation_type"]
+        grouped: dict[tuple[str, str, str], list[sqlite3.Row]] = {}
+        for row in rows_by_table[table]:
+            identity = (
+                str(row["source_key"]),
+                str(row["target_key"]),
+                str(row["relation_type"]),
             )
+            grouped.setdefault(identity, []).append(row)
+        groups_by_table[table] = grouped
+        # SQLite's previous GROUP BY path yielded logical identities in key
+        # order on supported releases.  Keep that public audit ordering stable
+        # rather than inheriting insertion order from the first physical row.
+        for source_key, target_key, relation_type in sorted(grouped):
+            rows = grouped[(source_key, target_key, relation_type)]
+            if len(rows) <= 1:
+                continue
             note = _safe_note(rows)
             issues.append({
                 "code": "conflicting_relation_notes" if note is None else "duplicate_relation_rows",
                 "severity": "review" if note is None else "fixable",
                 "fixable": note is not None,
-                "key": group["source_key"],
+                "key": source_key,
                 "message": (
-                    f"{group['source_key']} → {group['target_key']}（{group['relation_type']}）"
+                    f"{source_key} → {target_key}（{relation_type}）"
                     + ("有多筆不同 note，無法安全判斷應保留哪一筆。" if note is None else "有重複邏輯關聯，可安全合併。")
                 ),
                 "details": {
                     "table": table,
-                    "target_key": group["target_key"],
-                    "relation": group["relation_type"],
+                    "target_key": target_key,
+                    "relation": relation_type,
                     "notes": sorted({str(row["note"] or "") for row in rows}),
                 },
             })
 
     # Reciprocal integrity applies only to resolved relations.
-    rows = conn.execute("SELECT * FROM grammar_relations ORDER BY id").fetchall()
+    rows = rows_by_table["grammar_relations"]
+    resolved_groups = groups_by_table["grammar_relations"]
     seen_pairs: set[tuple[tuple[str, str, str], tuple[str, str, str]]] = set()
     for row in rows:
         reciprocal = reciprocal_type(str(row["relation_type"] or ""))
@@ -288,9 +302,7 @@ def relation_integrity_issues(conn: sqlite3.Connection) -> list[dict[str, Any]]:
         if marker in seen_pairs:
             continue
         seen_pairs.add(marker)
-        opposite = _rows_for_identity(
-            conn, "grammar_relations", row["target_key"], row["source_key"], reciprocal
-        )
+        opposite = resolved_groups.get(opposite_identity, [])
         if not opposite:
             issues.append({
                 "code": "missing_reciprocal_relation",

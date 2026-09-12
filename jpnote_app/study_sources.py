@@ -109,6 +109,25 @@ class SourceCatalog:
     sources: tuple[str, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class StudySourceSnapshot:
+    """One immutable bulk read shared by Quiz catalog/planning consumers."""
+
+    entries: tuple[EntrySnapshot, ...]
+    attempts: tuple[AttemptReplaySource, ...]
+
+    def catalog(self) -> SourceCatalog:
+        return SourceCatalog(
+            entry_count=len(self.entries),
+            replayable_attempt_count=len(self.attempts),
+            levels=tuple(sorted({entry.level for entry in self.entries if entry.level})),
+            sources=tuple(sorted(
+                {source for entry in self.entries for source in entry.sources if source}
+                | {attempt.source for attempt in self.attempts if attempt.source}
+            )),
+        )
+
+
 @runtime_checkable
 class CoreReadPort(Protocol):
     """The existing public core methods used by the stable adapter."""
@@ -336,13 +355,17 @@ class StudySourceService:
             raise QuestionSourceUnavailableError("jpnote 題目來源回傳格式錯誤")
         return result
 
-    def list_entry_snapshots(
+    def load_snapshot(
         self,
         *,
         entry_types: Sequence[str] | None = None,
+        include_attempts: bool = True,
+        results: Sequence[str] = ("wrong", "partial"),
         levels: Sequence[str] | None = None,
         sources: Sequence[str] | None = None,
-    ) -> tuple[EntrySnapshot, ...]:
+    ) -> StudySourceSnapshot:
+        """Read entry/attempt study sources through one public browse snapshot."""
+
         requested = ("grammar", "vocabulary") if entry_types is None else tuple(entry_types)
         browse_types: list[str] = []
         for value in requested:
@@ -353,26 +376,60 @@ class StudySourceService:
                 browse_types.append("vocab")
             else:
                 raise ValueError(f"不支援的 entry type：{value}")
+        if include_attempts:
+            browse_types.append("mistake")
 
         records = self._browse(
             types=list(dict.fromkeys(browse_types)),
             levels=list(levels) if levels else None,
+            results=list(results) if include_attempts else None,
         )
         source_filter = {_text(value) for value in sources or () if _text(value)}
-        snapshots: list[EntrySnapshot] = []
+        entries: list[EntrySnapshot] = []
+        attempts: list[AttemptReplaySource] = []
         for record in records:
-            if not isinstance(record, dict) or record.get("kind") not in {"grammar", "vocab"}:
+            if not isinstance(record, dict):
                 continue
+            kind = record.get("kind")
             data = record.get("data")
             if not isinstance(data, dict):
                 continue
-            snapshot = _entry_snapshot(data)
-            if not snapshot.key:
+            if kind in {"grammar", "vocab"}:
+                snapshot = _entry_snapshot(data)
+                if not snapshot.key:
+                    continue
+                if source_filter and not source_filter.intersection(snapshot.sources):
+                    continue
+                entries.append(snapshot)
                 continue
-            if source_filter and not source_filter.intersection(snapshot.sources):
+            if kind != "mistake" or not include_attempts:
                 continue
-            snapshots.append(snapshot)
-        return tuple(snapshots)
+            linked_levels = _string_tuple(record.get("levels", ()))
+            if not linked_levels:
+                linked_levels = self._linked_levels_for(
+                    _string_tuple(data.get("linked_entries", ()))
+                )
+            snapshot = _attempt_snapshot(data, linked_levels=linked_levels)
+            if not snapshot.event_key:
+                continue
+            if source_filter and snapshot.source not in source_filter:
+                continue
+            attempts.append(snapshot)
+        return StudySourceSnapshot(tuple(entries), tuple(attempts))
+
+    def list_entry_snapshots(
+        self,
+        *,
+        entry_types: Sequence[str] | None = None,
+        levels: Sequence[str] | None = None,
+        sources: Sequence[str] | None = None,
+    ) -> tuple[EntrySnapshot, ...]:
+        return self.load_snapshot(
+            entry_types=entry_types,
+            include_attempts=False,
+            levels=levels,
+            sources=sources,
+        ).entries
 
     def get_entry_snapshot(self, key: str) -> EntrySnapshot | None:
         try:
@@ -411,31 +468,13 @@ class StudySourceService:
         levels: Sequence[str] | None = None,
         sources: Sequence[str] | None = None,
     ) -> tuple[AttemptReplaySource, ...]:
-        records = self._browse(
-            types=["mistake"],
-            levels=list(levels) if levels else None,
-            results=list(results),
-        )
-        source_filter = {_text(value) for value in sources or () if _text(value)}
-        snapshots: list[AttemptReplaySource] = []
-        for record in records:
-            if not isinstance(record, dict) or record.get("kind") != "mistake":
-                continue
-            data = record.get("data")
-            if not isinstance(data, dict):
-                continue
-            linked_levels = _string_tuple(record.get("levels", ()))
-            if not linked_levels:
-                linked_levels = self._linked_levels_for(
-                    _string_tuple(data.get("linked_entries", ()))
-                )
-            snapshot = _attempt_snapshot(data, linked_levels=linked_levels)
-            if not snapshot.event_key:
-                continue
-            if source_filter and snapshot.source not in source_filter:
-                continue
-            snapshots.append(snapshot)
-        return tuple(snapshots)
+        return self.load_snapshot(
+            entry_types=(),
+            include_attempts=True,
+            results=results,
+            levels=levels,
+            sources=sources,
+        ).attempts
 
     def get_attempt_replay_source(self, event_key: str) -> AttemptReplaySource | None:
         try:
@@ -455,16 +494,4 @@ class StudySourceService:
         return snapshot if snapshot.event_key else None
 
     def source_catalog(self) -> SourceCatalog:
-        entries = self.list_entry_snapshots()
-        attempts = self.list_attempt_replay_sources()
-        levels = sorted({entry.level for entry in entries if entry.level})
-        sources = sorted(
-            {source for entry in entries for source in entry.sources if source}
-            | {attempt.source for attempt in attempts if attempt.source}
-        )
-        return SourceCatalog(
-            entry_count=len(entries),
-            replayable_attempt_count=len(attempts),
-            levels=tuple(levels),
-            sources=tuple(sources),
-        )
+        return self.load_snapshot().catalog()

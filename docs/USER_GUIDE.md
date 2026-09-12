@@ -1,6 +1,6 @@
 # jpnote 使用者操作手冊
 
-本手冊對應 jpnote v0.7.5 開發版。`jpnote --help` 提供精簡指令索引；`jpnote manual` 會輸出這份完整手冊，`jpnote manual --path` 會顯示手冊檔案位置。
+本手冊對應 jpnote v0.7.5.1 開發版。`jpnote --help` 提供精簡指令索引；`jpnote manual` 會輸出這份完整手冊，`jpnote manual --path` 會顯示手冊檔案位置。
 
 > 原則：任何會修改資料的操作都應先確認輸入與備份；`--check` 是真正 read-only 的預檢，不會建立、升級、修復或改寫實體資料庫。
 
@@ -22,7 +22,7 @@
 
 ```bash
 mkdir -p /tmp/jpnote-install
-tar -xzf jpnote-v0.7.5.tar.gz -C /tmp/jpnote-install --strip-components=1
+tar -xzf jpnote-v0.7.5.1.tar.gz -C /tmp/jpnote-install --strip-components=1
 /tmp/jpnote-install/install.sh
 rehash
 jpnote --version
@@ -815,6 +815,7 @@ v0.6.5 起：
 - duplicate candidate 掃描使用 normalized identity index；一般無衝突資料不再做全項目 O(n²) 比對。
 - `recent` 的 source metadata 也以批次方式載入。
 - v0.7.5 起，Quiz vocabulary pool 會一次建立 normalized safety features，對稱的 pair-safety 只計算一次，並在同一 source 的不同題型間重用 safe candidates／meaning metadata；題庫不足確認直接持久化第一次的 immutable plan，不再重新讀取來源與重建題庫。
+- v0.7.5.1 起，audit／romaji audit／Markdown export／import preflight／`list --select` 與 Quiz mixed source 進一步共用 bulk snapshot/index，避免資料量成長後反覆 full hydration 或 N+1；這些最佳化不改變輸出格式、stable key、schema 或合法 import payload。
 
 這些是內部效能改善，不改變 stable key、SQLite schema 或合法 JSON 欄位。
 

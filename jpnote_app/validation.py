@@ -80,31 +80,129 @@ def parse_payload(text: str) -> dict[str, Any]:
         match.group(1).strip()
         for match in re.finditer(r"```(?:json)?\s*(.*?)```", text, re.DOTALL | re.IGNORECASE)
     )
-    decoder = json.JSONDecoder()
     found: dict[str, dict[str, Any]] = {}
     for candidate in candidates:
         if not candidate:
             continue
         try:
             data = json.loads(candidate)
-            if _looks_like_payload(data):
-                found[json.dumps(data, ensure_ascii=False, sort_keys=True)] = data
+            _collect_payload_objects(data, found)
         except json.JSONDecodeError:
             pass
-        for position, char in enumerate(candidate):
-            if char != "{":
-                continue
+        raw_objects, _ = _outer_json_objects(candidate)
+        for raw_object in raw_objects:
             try:
-                data, _ = decoder.raw_decode(candidate[position:])
+                data = json.loads(raw_object)
             except json.JSONDecodeError:
                 continue
-            if _looks_like_payload(data):
-                found[json.dumps(data, ensure_ascii=False, sort_keys=True)] = data
+            _collect_payload_objects(data, found)
+        # Run the narrow compatibility fallback even when the primary scanner
+        # later returns to a balanced state.  Legacy paste accepted payloads
+        # that appeared inside otherwise-malformed quoted/braced prose; limiting
+        # fallback starts to jpnote's three top-level keys keeps that recovery
+        # without returning to raw_decode-at-every-brace behavior.
+        for data in _fallback_payload_objects(candidate):
+            _collect_payload_objects(data, found)
     if not found:
         raise ValueError("找不到有效的 jpnote JSON。最外層需要 items 或 attempts 陣列。")
     if len(found) > 1:
         raise ValueError("偵測到多份不同的 jpnote JSON；請一次只匯入一份，避免誤選第一份資料。")
     return next(iter(found.values()))
+
+
+def _collect_payload_objects(
+    value: Any,
+    found: dict[str, dict[str, Any]],
+) -> None:
+    """Collect payload-shaped mappings from one already-decoded JSON value.
+
+    Recursive inspection preserves the old ability to recover a payload nested
+    inside a wrapper object without repeatedly invoking ``raw_decode`` at every
+    ``{`` byte in the input.  That old scan became superlinear on large nested
+    JSON pasted with surrounding prose.
+    """
+    if isinstance(value, dict):
+        if _looks_like_payload(value):
+            found[json.dumps(value, ensure_ascii=False, sort_keys=True)] = value
+        for child in value.values():
+            _collect_payload_objects(child, found)
+    elif isinstance(value, list):
+        for child in value:
+            _collect_payload_objects(child, found)
+
+
+def _outer_json_objects(text: str) -> tuple[list[str], bool]:
+    """Return recoverable JSON-object spans in one linear text scan.
+
+    Normal balanced input emits only top-level objects.  When surrounding prose
+    contains an unmatched opening brace, also emit complete *direct children*
+    of that still-unmatched brace.  Those child spans are disjoint, so decoding
+    them cannot recreate the old ``raw_decode``-at-every-brace quadratic scan.
+    Strings and escapes are honored while matching braces.
+    """
+    stack: list[int] = []
+    closed: list[tuple[int, int, int | None]] = []
+    in_string = False
+    escaped = False
+    for index, char in enumerate(text):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+            continue
+        if char == "{":
+            stack.append(index)
+            continue
+        if char == "}" and stack:
+            start = stack.pop()
+            parent = stack[-1] if stack else None
+            closed.append((start, index + 1, parent))
+
+    unmatched = set(stack)
+    spans = [
+        (start, stop)
+        for start, stop, parent in closed
+        if parent is None or parent in unmatched
+    ]
+    spans.sort()
+    return [text[start:stop] for start, stop in spans], bool(stack or in_string)
+
+
+_PAYLOAD_OBJECT_START = re.compile(r'\{\s*"(?:source|items|attempts)"\s*:')
+
+
+def _fallback_payload_objects(text: str) -> list[Any]:
+    """Recover likely payload objects after malformed surrounding prose.
+
+    This compatibility fallback is intentionally narrow: it tries object starts
+    whose *first JSON key*
+    is one of jpnote's three allowed top-level fields, and skips to the decoder's
+    end after every success.  Successful spans are therefore disjoint instead
+    of re-decoding every nested brace as the legacy implementation did.
+    """
+    decoder = json.JSONDecoder()
+    result: list[Any] = []
+    position = 0
+    while True:
+        match = _PAYLOAD_OBJECT_START.search(text, position)
+        if match is None:
+            break
+        try:
+            value, end = decoder.raw_decode(text, match.start())
+        except json.JSONDecodeError:
+            position = match.start() + 1
+            continue
+        result.append(value)
+        position = max(end, match.end())
+    return result
+
+
 def _looks_like_payload(data: Any) -> bool:
     # Presence is enough here; strict array type validation belongs to
     # normalize_payload() so malformed payloads receive a precise error.

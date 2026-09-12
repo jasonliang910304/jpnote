@@ -1,4 +1,13 @@
 # Changelog
+## 0.7.5.1 — 2026-09-12
+
+- reusable bulk-read / immutable snapshot foundation：Quiz mixed source 透過一次 `StudySourceSnapshot` 取得 entries＋attempts；source catalog 不再做兩次完整 hydration，既有 reader/fake 若沒有 bulk capability 仍保留相容 fallback。
+- import preflight／apply 新增 bulk entry outcome snapshot 與一次性 `AttemptOutcomeIndex`；generated attempt identity／event-key duplicate/conflict 判定不再反覆 full-table scan，same-batch identity semantics 與 raw `aliases_json` normalization 行為保持等價。
+- audit 改用預載 entry/attempt/relation indexes；romaji audit 使用 summary batch read；Markdown export 一次 hydrate entries；`list --select` 不再逐 entry `get_entry()`。歷史 1019-item snapshot 上 full audit SELECT 約 `3533 → 17`、romaji audit `3477 → 1`、Markdown export `1475 → 20`、20-item＋20-attempt preflight `803 → 8`，baseline/candidate public JSON／export content／fixed-seed Quiz identity 全部一致。
+- `parse_payload()` 移除對每個 `{` 反覆 `raw_decode(candidate[position:])` 的超線性掃描；改為 whole-document decode＋一次 brace/string-aware outer-object scan，再遞迴尋找 nested payload。large nested regression 中 `raw_decode` 約 `6004 → 3`，多個不同 payload 仍 fail closed。
+- 新增 query-count/scaling regression，防止 romaji audit、full audit attempt/relation reads、Markdown export、bulk preflight 與 Quiz shared snapshot 回退成 N+1。
+- source／installer version 更新為 0.7.5.1；core schema 維持 v5、Quiz schema 維持 v2、public import JSON schema 不變。assistant final segmented gate `506 passed, 1 skipped, 36 subtests passed`（507 collected），唯一 skip 是隔離容器無 real fzf；app-only coverage `78%`（9362 statements / 2077 missed）。
+
 ## 0.7.5 — 2026-09-12
 
 - Quiz vocabulary pool startup performance：每個 entry 的 normalized names／reading／meaning／review-group features 只建立一次；對稱 safe-pair 只判斷一次並建立 exclusion set，同一 source 的 MCQ／True-False 重用 safe candidates 與 meaning metadata。固定 seed 的題目 identity／prompt／choices／answer semantics 保持等價。

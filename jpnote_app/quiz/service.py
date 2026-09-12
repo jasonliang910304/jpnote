@@ -194,13 +194,23 @@ class QuizService:
 
         entries = ()
         attempts = ()
-        if mode in {"mixed", "vocabulary"}:
+        snapshot_loader = getattr(self._source_reader, "load_snapshot", None)
+        if mode == "mixed" and callable(snapshot_loader):
+            snapshot = snapshot_loader(
+                entry_types=("vocabulary",),
+                include_attempts=True,
+                levels=levels,
+                sources=sources,
+            )
+            entries = snapshot.entries
+            attempts = snapshot.attempts
+        elif mode in {"mixed", "vocabulary"}:
             entries = self._source_reader.list_entry_snapshots(
                 entry_types=("vocabulary",),
                 levels=levels,
                 sources=sources,
             )
-        if mode in {"mixed", "mistake"}:
+        if mode in {"mixed", "mistake"} and not (mode == "mixed" and callable(snapshot_loader)):
             attempts = self._source_reader.list_attempt_replay_sources(
                 levels=levels,
                 sources=sources,

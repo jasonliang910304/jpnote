@@ -25,7 +25,7 @@ from .repository import (
     search_entries,
     upsert_entry,
 )
-from .import_outcomes import classify_attempt_outcome
+from .import_outcomes import build_attempt_outcome_index, classify_attempt_outcome
 from .relation_integrity import delete_logical_relation, reciprocal_type, upsert_relation
 from .validation import normalize_identity_text, normalize_payload
 
@@ -305,8 +305,15 @@ def apply_import(conn: sqlite3.Connection, plan: ImportPlan) -> ImportResult:
         result.resolved_relations = resolve_pending_relations(conn)
 
         available_keys = {row["key"] for row in conn.execute("SELECT key FROM entries").fetchall()}
+        attempt_index = build_attempt_outcome_index(conn)
+        identity_signatures = set(attempt_index.by_identity)
         for attempt in plan.attempts:
-            outcome = classify_attempt_outcome(conn, attempt, available_keys=available_keys)
+            outcome = classify_attempt_outcome(
+                conn,
+                attempt,
+                available_keys=available_keys,
+                index=attempt_index,
+            )
             if outcome["status"] == "invalid_links":
                 raise ValueError(
                     "作答紀錄引用了尚未收錄的 key："
@@ -321,8 +328,13 @@ def apply_import(conn: sqlite3.Connection, plan: ImportPlan) -> ImportResult:
             if outcome["status"] == "duplicate":
                 result.skipped_attempts += 1
                 continue
-            if insert_attempt(conn, attempt):
+            if insert_attempt(
+                conn,
+                attempt,
+                identity_signatures=identity_signatures,
+            ):
                 result.added_attempts += 1
+                attempt_index.add(attempt)
             else:
                 # Defensive fallback: outcome classification should have caught
                 # every duplicate before insertion.

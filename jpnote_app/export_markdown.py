@@ -8,7 +8,7 @@ from pathlib import Path
 
 from .config import export_dir
 from .fs_utils import atomic_write_text, ensure_private_dir
-from .repository import entry_attempt_stats, entry_relations, entry_senses, list_attempts, list_entries
+from .repository import list_attempts, list_entries_full
 from .attempt_options import parse_legacy_prompt_options
 from .sorting import LEVEL_ORDER
 
@@ -32,7 +32,11 @@ def export_all(conn: sqlite3.Connection) -> list[Path]:
     generated = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M")
     paths: list[Path] = []
 
-    grammar = list_entries(conn, "grammar")
+    # Export touches most entry fields repeatedly.  Hydrate the complete entry
+    # snapshot once and reuse embedded senses/relations/attempt stats across all
+    # generated views instead of issuing per-entry repository queries.
+    all_entries = list_entries_full(conn)
+    grammar = [entry for entry in all_entries if entry["type"] == "grammar"]
     lines = ["# 文法總整理", "", f"> 更新時間：{generated}", ""]
     current_level = None
     for entry in grammar:
@@ -47,20 +51,20 @@ def export_all(conn: sqlite3.Connection) -> list[Path]:
             lines.append(f"- 相關形式：{'、'.join(entry['aliases'])}")
         if entry["review_group"] or entry.get("aliases"):
             lines.append("")
-        for number, sense in enumerate(entry_senses(conn, entry["key"]), 1):
+        for number, sense in enumerate(entry.get("senses", []), 1):
             lines.extend([f"#### {number}. {sense['meaning']}", ""])
             if sense["example_ja"]:
                 lines.extend([sense["example_ja"], ""])
             if sense["example_zh"]:
                 lines.extend([f"> {sense['example_zh']}", ""])
-        relations = entry_relations(conn, entry["key"])
+        relations = entry.get("related_grammar", [])
         if relations:
             lines.extend(["#### 相關文法", ""])
             for relation in relations:
                 note = f"——{relation['note']}" if relation["note"] else ""
                 lines.append(f"- **{relation['relation']}**：{relation['display']} `{relation['key']}`{note}")
             lines.append("")
-        stats = entry_attempt_stats(conn, entry["key"])
+        stats = entry.get("attempt_stats", {})
         if stats["attempt_count"]:
             strict = stats.get("strict_accuracy", stats.get("accuracy"))
             weighted = stats.get("weighted_accuracy")
@@ -100,7 +104,7 @@ def export_all(conn: sqlite3.Connection) -> list[Path]:
     lines = ["# 文法關聯", "", f"> 更新時間：{generated}", ""]
     any_relation = False
     for entry in grammar:
-        relations = entry_relations(conn, entry["key"])
+        relations = entry.get("related_grammar", [])
         if not relations:
             continue
         any_relation = True
@@ -122,14 +126,14 @@ def export_all(conn: sqlite3.Connection) -> list[Path]:
     atomic_write_text(path, "\n".join(lines).rstrip() + "\n")
     paths.append(path)
 
-    vocab = list_entries(conn, "vocabulary")
+    vocab = [entry for entry in all_entries if entry["type"] == "vocabulary"]
     lines = [
         "# 單字表", "", f"> 更新時間：{generated}", "",
         "| 等級 | 單字 | 讀音 | 羅馬拼音／重音 | 意思 |",
         "|---|---|---|---|---|",
     ]
     for entry in vocab:
-        meanings = "；".join(sense["meaning"] for sense in entry_senses(conn, entry["key"]))
+        meanings = "；".join(sense["meaning"] for sense in entry.get("senses", []))
         lines.append(
             "| {level} | {display} | {reading} | {pronunciation} | {meanings} |".format(
                 level=_escape(entry["level"] or "—"),

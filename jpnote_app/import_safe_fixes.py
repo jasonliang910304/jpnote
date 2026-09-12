@@ -7,13 +7,21 @@ import sqlite3
 from typing import Any
 
 from .data_quality import clean_aliases, safe_clean_senses, sense_is_blank
+from .import_outcomes import build_entry_outcome_index
 from .models import ImportPlan
 from .repository import get_entry
 from .services import detect_duplicate_warnings
 
 
-def _analyze_item(conn: sqlite3.Connection, item: dict[str, Any]) -> dict[str, Any]:
-    existing = get_entry(conn, item["key"], include_attempts=False)
+def _analyze_item(
+    conn: sqlite3.Connection,
+    item: dict[str, Any],
+    *,
+    existing: dict[str, Any] | None = None,
+    existing_known: bool = False,
+) -> dict[str, Any]:
+    if not existing_known:
+        existing = get_entry(conn, item["key"], include_attempts=False)
     actions: list[dict[str, Any]] = []
 
     cleaned_incoming_aliases = clean_aliases(
@@ -99,10 +107,20 @@ def _analyze_item(conn: sqlite3.Connection, item: dict[str, Any]) -> dict[str, A
     }
 
 
-def safe_import_fix_candidates(conn: sqlite3.Connection, plan: ImportPlan) -> list[dict[str, Any]]:
+def safe_import_fix_candidates(
+    conn: sqlite3.Connection,
+    plan: ImportPlan,
+    *,
+    existing_entries: dict[str, dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
     actions: list[dict[str, Any]] = []
     for item in plan.items:
-        actions.extend(_analyze_item(conn, item)["actions"])
+        actions.extend(_analyze_item(
+            conn,
+            item,
+            existing=(existing_entries or {}).get(item["key"]),
+            existing_known=existing_entries is not None,
+        )["actions"])
     return actions
 
 
@@ -110,11 +128,22 @@ def apply_safe_import_fixes(
     conn: sqlite3.Connection,
     plan: ImportPlan,
 ) -> tuple[ImportPlan, list[dict[str, Any]]]:
+    existing_entries = {
+        key: snapshot.data
+        for key, snapshot in build_entry_outcome_index(
+            conn, (item["key"] for item in plan.items)
+        ).items()
+    }
     items: list[dict[str, Any]] = []
     actions: list[dict[str, Any]] = []
     for original in plan.items:
         item = deepcopy(original)
-        analysis = _analyze_item(conn, item)
+        analysis = _analyze_item(
+            conn,
+            item,
+            existing=existing_entries.get(item["key"]),
+            existing_known=True,
+        )
         actions.extend(analysis["actions"])
         item["aliases"] = analysis["aliases"]
         item["senses"] = analysis["senses"]

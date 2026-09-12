@@ -1,4 +1,4 @@
-# jpnote v0.7.5
+# jpnote v0.7.5.1
 
 > **專案聲明**
 >
@@ -6,7 +6,17 @@
 
 本版將原本 1,200 多行的單檔腳本拆成可重用的核心模組與可選介面層。
 
-## v0.7.5 Performance / Quiz early optimization（candidate）
+## v0.7.5.1 Performance architecture / bulk-read（candidate）
+
+v0.7.5.1 延續 v0.7.5 的效能主軸，將反覆 full hydration、attempt identity 掃描、audit／export／preflight N+1 與 prefixed JSON 超線性解析收斂到可重用的 bulk snapshot/index 路徑；不修改 core schema v5、Quiz schema v2 或 public import JSON schema。
+
+- Quiz mixed-mode source catalog／planning 可共用一次 immutable source snapshot，不再分別完整 hydrate entries 與 attempts。
+- import preflight／apply 共用 bulk entry outcome snapshot 與一次性 attempt identity index；generated-attempt duplicate/conflict semantics 維持不變。
+- audit relation/attempt link、romaji audit、Markdown export、`list --select` 改為批次讀取，並加入 query-count regression。
+- `parse_payload()` 先嘗試完整 JSON，再以單次 brace/string-aware outer-object scan 尋找 embedded payload；保留 nested wrapper discovery 與多 payload fail-closed。
+- 真實 1019-item 歷史 snapshot 的 baseline/candidate 比較：full audit SELECT 約 3533→17、romaji audit 3477→1、Markdown export 1475→20、20-item+20-attempt preflight 803→8；對應 public output 完全一致。
+
+## v0.7.5 Performance / Quiz early optimization（released）
 
 v0.7.5 先把資料量成長後最明顯的 Quiz 啟動瓶頸提前處理，同時保持 core schema v5、Quiz schema v2 與 public import JSON schema 不變。
 
@@ -28,7 +38,7 @@ v0.7.4 是 v0.7.3 Deep Adversarial Audit 後的 correctness/safety maintenance �
 - 多個 incoming duplicate mapping 到同一 stable key 時使用 deterministic precedence；不再因 JSON item 順序不同而產生不同 scalar 結果。
 - legacy `jpnote paste` clipboard／`paste --stdin` 與正式 `import --stdin` 共用 16 MiB、strict UTF-8 boundary。parser 演算法本身的效能重構留到 v0.7.5。
 
-後續 v0.7.5 會集中處理 performance＋architecture cleanup，採「功能等價與安全契約優先」原則，再移除被新 bulk/snapshot 架構取代的舊路徑。
+後續 v0.7.5.x 繼續處理 performance＋architecture cleanup，採「功能等價與安全契約優先」原則，再移除被新 bulk/snapshot 架構取代的舊路徑。
 
 ## v0.7.3 Stability foundation 與 recent UX
 
@@ -401,13 +411,13 @@ jpnote recent --format json           # 結構化輸出
 ## 安裝
 
 ```bash
-mkdir -p /tmp/jpnote-v0.7.5
+mkdir -p /tmp/jpnote-v0.7.5.1
 
-tar -xzf ~/Downloads/jpnote-v0.7.5.tar.gz \
-  -C /tmp/jpnote-v0.7.5 \
+tar -xzf ~/Downloads/jpnote-v0.7.5.1.tar.gz \
+  -C /tmp/jpnote-v0.7.5.1 \
   --strip-components=1
 
-/tmp/jpnote-v0.7.5/install.sh
+/tmp/jpnote-v0.7.5.1/install.sh
 jpnote init
 ```
 

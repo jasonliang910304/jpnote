@@ -14,7 +14,12 @@ from typing import Any
 
 from .models import ImportPlan
 from .repository import get_entry
-from .import_outcomes import classify_attempt_outcome, classify_entry_outcome
+from .import_outcomes import (
+    build_entry_outcome_index,
+    build_attempt_outcome_index,
+    classify_attempt_outcome,
+    classify_entry_outcome_snapshot,
+)
 from .relation_integrity import reciprocal_type
 from .import_safe_fixes import safe_import_fix_candidates
 from .data_quality import clean_aliases
@@ -340,6 +345,14 @@ def _resolve_available_pending_state(
 def build_preflight_report(conn: sqlite3.Connection, plan: ImportPlan) -> dict[str, Any]:
     """Return a JSON-serializable import report using real apply classifiers."""
     incoming_by_key = {item["key"]: item for item in plan.items}
+    snapshot_keys = {
+        *incoming_by_key,
+        *(warning.other_key for warning in plan.warnings),
+    }
+    entry_index = build_entry_outcome_index(conn, snapshot_keys)
+    existing_entries = {
+        key: snapshot.data for key, snapshot in entry_index.items()
+    }
     warning_map: dict[str, list[dict[str, Any]]] = {}
     conflicts: list[dict[str, Any]] = []
 
@@ -347,7 +360,7 @@ def build_preflight_report(conn: sqlite3.Connection, plan: ImportPlan) -> dict[s
         incoming = incoming_by_key.get(warning.incoming_key)
         other = incoming_by_key.get(warning.other_key)
         if other is None:
-            other = get_entry(conn, warning.other_key, include_attempts=False)
+            other = existing_entries.get(warning.other_key)
         record = {
             **warning.to_dict(),
             "incoming": _entry_brief(incoming),
@@ -367,8 +380,12 @@ def build_preflight_report(conn: sqlite3.Connection, plan: ImportPlan) -> dict[s
     relation_counts = {"new": 0, "update": 0, "unchanged": 0}
     resolved_relation_state, pending_relation_state = _relation_state(conn)
     for item in plan.items:
-        existing = get_entry(conn, item["key"], include_attempts=False)
-        base_status = classify_entry_outcome(conn, item, plan.source)
+        existing = existing_entries.get(item["key"])
+        base_status = classify_entry_outcome_snapshot(
+            entry_index.get(item["key"]),
+            item,
+            plan.source,
+        )
         relation_outcomes: list[dict[str, Any]] = []
         if item["type"] == "grammar":
             for relation in item.get("related_grammar", []):
@@ -419,7 +436,9 @@ def build_preflight_report(conn: sqlite3.Connection, plan: ImportPlan) -> dict[s
             incoming = incoming_by_key.get(conflict["target_key"]) or incoming_by_key.get(conflict["source_key"])
             matched = incoming_by_key.get(conflict["source_key"])
             if matched is None:
-                matched = get_entry(conn, conflict["source_key"], include_attempts=False)
+                matched = existing_entries.get(conflict["source_key"])
+                if matched is None:
+                    matched = get_entry(conn, conflict["source_key"], include_attempts=False)
             conflict["incoming"] = _entry_brief(incoming)
             conflict["matched"] = _entry_brief(matched)
         conflicts.extend(pending_conflicts)
@@ -442,8 +461,14 @@ def build_preflight_report(conn: sqlite3.Connection, plan: ImportPlan) -> dict[s
 
     attempts: list[dict[str, Any]] = []
     attempt_counts = {"new": 0, "duplicate": 0, "conflict": 0, "invalid_links": 0}
+    attempt_index = build_attempt_outcome_index(conn)
     for attempt in plan.attempts:
-        outcome = classify_attempt_outcome(conn, attempt, available_keys=available_keys)
+        outcome = classify_attempt_outcome(
+            conn,
+            attempt,
+            available_keys=available_keys,
+            index=attempt_index,
+        )
         status = outcome["status"]
         attempt_counts[status] += 1
         existing = outcome.get("existing") or {}
@@ -460,7 +485,11 @@ def build_preflight_report(conn: sqlite3.Connection, plan: ImportPlan) -> dict[s
             "existing_result": existing.get("result", ""),
         })
 
-    safe_fixes = safe_import_fix_candidates(conn, plan)
+    safe_fixes = safe_import_fix_candidates(
+        conn,
+        plan,
+        existing_entries=existing_entries,
+    )
     updates = [
         {
             "key": item["incoming"].get("key", ""),

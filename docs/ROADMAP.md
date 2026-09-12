@@ -3,7 +3,7 @@
 最後更新：2026-09-12（Asia/Taipei）
 正式 release/tag：v0.7.5；annotated tag object `a780fe24fbd5c91e9ce86ef7e63460fc256079d6` 固定指向 release commit `17bbb36e6c639fc72a05845ab49273c9f98ce50d`
 正式安裝版本：0.7.5
-目前開發位置：v0.7.5 early-performance release 已完成；release-commit push CI 與 tag-triggered Core regression／Windows import client CI 全綠。post-gate 8-item data correction 也已完成。下一個 runtime 工作進入 v0.7.5.x Performance & Architecture Cleanup；GitHub 遠端變更一律由使用者親手處理，AI 僅做 read-only GitHub 查詢、隔離修改、測試與 patch 準備。
+目前開發位置：v0.7.5 release 已完成；post-release main=`05e1f1b72a5405e64f4d9ee53aa8dbfbb6ce82f5`。目前在 exact `05e1f1b...` 隔離 checkout 開發 **v0.7.5.1 Performance Architecture / Bulk Read candidate**；尚未套到使用者 repository／正式安裝。GitHub 遠端變更一律由使用者親手處理，AI 僅做 read-only GitHub 查詢、隔離修改、測試與 patch 準備。
 
 ## 0.7.2 高優先主軸 — completed
 
@@ -92,13 +92,26 @@
 
 這只是 Quiz O(N²) 的**第一階段 hot-path reduction**：為了完全保持既有 RNG/shuffle 輸出，仍會對每個 source 建立 ordered candidate sequence 並 shuffle；真正 asymptotic redesign 若會改 fixed-seed sequence，必須另立明確 generator-version／equivalence boundary，不在這個 early patch 偷改。
 
-### v0.7.5 remaining work after early release
+### v0.7.5.1 — bulk-read / snapshot / parser checkpoint（candidate）
 
-- 建立 reusable bulk read／immutable source snapshot／normalized indexes，讓 export、audit、preflight、search、Quiz 等不再各自重複 hydrate。
-- Quiz source catalog／session planning 消除重複 full hydration；加入真正動態 loading。
-- attempt identity：移除 repeated full-table scan／N+1，建立一次性 identity snapshot/index。
-- export／import preflight／search/list/romaji-audit：遷移至 bulk hydration，加入 query-count 與 scaling regression。
-- `parse_payload()`：處理 adversarial repeated `raw_decode` 超線性掃描；所有 ingest path 已在 v0.7.4 先有 hard size cap。
+此 checkpoint 把 v0.7.5 early release 後最明確的 N+1／重複 hydration 收斂成共用 architecture，優先保持 public output、import conflict semantics 與 fixed-seed Quiz identity 完全等價：
+
+- `StudySourceSnapshot`：Quiz mixed source 一次取得 entries＋attempts；source catalog 不再分別 full hydrate，舊 reader protocol 保留 fallback。
+- `EntryOutcomeSnapshot`＋`AttemptOutcomeIndex`：import preflight／safe-fix／apply 共享 bulk entry state 與一次性 attempt identity；generated attempt 不再每筆掃描完整 attempt table。
+- full audit：attempt links、resolved/pending relation reciprocity 與 entry existence 使用預載 index；歷史 1019-item snapshot SELECT 約 `3533 → 17`，issue JSON 完全一致。
+- romaji audit：`3477 → 1 SELECT`；Markdown export：`1475 → 20 SELECTs`，7 份 export 內容（排除 generated timestamp）完全一致。
+- 20-item＋20-attempt synthetic preflight：`803 → 8 SELECTs`，report JSON 完全一致；raw alias JSON normalization regression 保留。
+- `parse_payload()`：whole-document decode＋單次 brace/string-aware outer-object scan；large nested regression `raw_decode` 約 `6004 → 3`，nested payload discovery 與 multiple-payload fail-closed 保留。
+- `list --select` 改用 bulk full-entry read，不再逐 entry `get_entry()`。
+- 新增 query-count/scaling tests；version-bump 前 assistant 完整分段 gate `502 passed, 1 skipped, 36 subtests passed`，唯一 skip 為 container 無 real fzf；app-only coverage `78%`（9342 statements / 2074 missed）。
+- source／installer candidate version 0.7.5.1；core schema v5／Quiz schema v2／public import JSON schema不變。
+
+完整開發記錄：`docs/audits/v0.7.5.1-performance-architecture.md`。
+
+### v0.7.5 remaining work after 0.7.5.1
+
+- 將 0.7.5.1 建立的 bulk snapshot/index 擴展到仍有重複 normalization／hydration 的 search/fzf 路徑；避免為「共用架構」無邊界重寫已達標的 read paths。
+- Quiz 加入真正動態 loading/progress；不得以 spinner 取代實際效能改善。
 - fzf：處理 per-keypress subprocess/full normalization 的效能面；matching/ranking semantics 本身在 v0.7.6 統一。
 - 對被新架構取代的舊 implementation 做 bounded cleanup：confirmed dead code 直接刪；superseded duplicate 先遷移 caller 再刪；migration/public API/installer fallback 等 compatibility-sensitive code 不因「看似沒用」就移除。
 - release tooling UX：future actual-gate script 將 raw pytest 輸出完整寫 log，但 terminal 進度改用固定寬度／分組摘要，避免點狀 progress 因終端寬度換行。

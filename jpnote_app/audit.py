@@ -10,12 +10,16 @@ from datetime import date, datetime
 import unicodedata
 
 from .models import AuditIssue
-from .repository import list_entries, attempt_row_to_dict
+from .repository import list_attempts, list_entries
 from .services import duplicate_candidates
 from .romaji import spaced_hepburn
 from .romaji_maintenance import romaji_audit_records
-from .services import pending_resolution_analysis, resolve_pending_relations
-from .relation_integrity import relation_integrity_issues, apply_safe_relation_repairs
+from .services import resolve_pending_relations
+from .relation_integrity import (
+    apply_safe_relation_repairs,
+    reciprocal_type,
+    relation_integrity_issues,
+)
 from .attempt_identity import attempt_identity_signature, attempt_content_signature, legacy_attempt_identity_signature_v063
 from .sorting import normalize_level
 from .attempt_options import cleaned_prompt_and_options, _suspicious_legacy_option_reason, normalized_options
@@ -250,14 +254,12 @@ def run_audit(conn: sqlite3.Connection) -> list[AuditIssue]:
     identity_groups: dict[str, list[dict[str, Any]]] = {}
     legacy_identity_groups: dict[str, list[dict[str, Any]]] = {}
     attempt_rows = conn.execute("SELECT * FROM attempts ORDER BY id").fetchall()
+    attempts_by_id = {
+        int(attempt["id"]): attempt
+        for attempt in list_attempts(conn)
+    }
     for raw_row in attempt_rows:
-        links = [
-            link["entry_key"] for link in conn.execute(
-                "SELECT entry_key FROM attempt_entries WHERE attempt_id=? ORDER BY entry_key",
-                (raw_row["id"],),
-            ).fetchall()
-        ]
-        attempt_dict = attempt_row_to_dict(raw_row, links)
+        attempt_dict = attempts_by_id[int(raw_row["id"])]
         identity_groups.setdefault(attempt_identity_signature(attempt_dict), []).append(attempt_dict)
         legacy_identity_groups.setdefault(legacy_attempt_identity_signature_v063(attempt_dict), []).append(attempt_dict)
 
@@ -432,8 +434,9 @@ def run_audit(conn: sqlite3.Connection) -> list[AuditIssue]:
                 ))
 
     romaji_status = {record["key"]: record for record in romaji_audit_records(conn)}
+    entries = list_entries(conn)
 
-    for entry in list_entries(conn):
+    for entry in entries:
         key = entry["key"]
         if entry["type"] == "vocabulary":
             if not entry["reading"]:
@@ -504,24 +507,64 @@ def run_audit(conn: sqlite3.Connection) -> list[AuditIssue]:
             {"other_key": candidate["right_key"]},
         ))
 
+    entry_keys = {str(entry["key"]) for entry in entries}
+    resolved_state: dict[tuple[str, str, str], list[str]] = {}
+    for row in conn.execute(
+        "SELECT source_key, target_key, relation_type, note FROM grammar_relations ORDER BY id"
+    ).fetchall():
+        identity = (
+            str(row["source_key"]),
+            str(row["target_key"]),
+            str(row["relation_type"]),
+        )
+        resolved_state.setdefault(identity, []).append(str(row["note"] or ""))
+
+    pending_rows = conn.execute(
+        "SELECT * FROM pending_grammar_relations ORDER BY id"
+    ).fetchall()
+    pending_state: dict[tuple[str, str, str], list[str]] = {}
+    for row in pending_rows:
+        identity = (
+            str(row["source_key"]),
+            str(row["target_key"]),
+            str(row["relation_type"]),
+        )
+        pending_state.setdefault(identity, []).append(str(row["note"] or ""))
+
     seen_pending: set[tuple[str, str, str]] = set()
-    for row in conn.execute("SELECT * FROM pending_grammar_relations ORDER BY id").fetchall():
+    for row in pending_rows:
         identity = (str(row["source_key"]), str(row["target_key"]), str(row["relation_type"]))
         if identity in seen_pending:
             continue
         seen_pending.add(identity)
-        target_exists = conn.execute("SELECT 1 FROM entries WHERE key = ?", (row["target_key"],)).fetchone()
+        target_exists = str(row["target_key"]) in entry_keys
         if target_exists:
-            analysis = pending_resolution_analysis(conn, *identity)
-            if not analysis["safe"]:
+            reciprocal = reciprocal_type(identity[2])
+            opposite = (
+                (identity[1], identity[0], reciprocal)
+                if reciprocal is not None else None
+            )
+            pending_notes = {
+                note.strip() for note in pending_state.get(identity, []) if note.strip()
+            }
+            resolved_notes = {
+                note.strip() for note in resolved_state.get(identity, []) if note.strip()
+            }
+            if opposite is not None:
+                resolved_notes.update(
+                    note.strip()
+                    for note in resolved_state.get(opposite, [])
+                    if note.strip()
+                )
+            if len(pending_notes | resolved_notes) > 1:
                 issues.append(AuditIssue(
                     "pending_relation_note_conflict", "review", False, row["source_key"],
                     f"待補 relation 與既有 note 衝突，不能自動連結：{row['target_key']}",
                     {
                         "target_key": row["target_key"],
                         "relation": row["relation_type"],
-                        "pending_notes": analysis["pending_notes"],
-                        "resolved_notes": analysis["resolved_notes"],
+                        "pending_notes": sorted(pending_notes),
+                        "resolved_notes": sorted(resolved_notes),
                     },
                 ))
                 continue

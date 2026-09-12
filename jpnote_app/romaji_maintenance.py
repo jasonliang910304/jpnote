@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from typing import Any
 
-from .repository import get_entry, list_entries
+from .repository import list_entries
 from .romaji import spaced_hepburn
 from .search_normalization import compact_text, romaji_variants
 
@@ -45,8 +45,10 @@ def normalize_import_romaji(reading: str, romaji: str) -> str:
 
 def romaji_audit_records(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
-    for summary in list_entries(conn, "vocabulary"):
-        entry = get_entry(conn, summary["key"], include_attempts=False) or summary
+    # Reading/romaji audit only needs columns already present in the entry
+    # summary.  Hydrating senses/sources/relations per vocabulary used to turn
+    # this read-only command into an N+1 query path as the dataset grew.
+    for entry in list_entries(conn, "vocabulary"):
         reading = str(entry.get("reading") or "")
         stored = str(entry.get("romaji") or "")
         canonical = canonical_romaji_for_reading(reading)

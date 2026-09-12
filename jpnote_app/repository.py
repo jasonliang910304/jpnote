@@ -705,7 +705,12 @@ def replace_entry(conn: sqlite3.Connection, original_key: str, item: dict[str, A
     return True
 
 
-def insert_attempt(conn: sqlite3.Connection, attempt: dict[str, Any]) -> bool:
+def insert_attempt(
+    conn: sqlite3.Connection,
+    attempt: dict[str, Any],
+    *,
+    identity_signatures: set[str] | None = None,
+) -> bool:
     # Backward compatibility for attempts imported before v0.6.3: their
     # auto-generated event_key hashed the entire normalized record, so a later
     # regenerated explanation could produce a different key.  For auto-keyed
@@ -713,10 +718,14 @@ def insert_attempt(conn: sqlite3.Connection, attempt: dict[str, Any]) -> bool:
     # inserting. Explicit event_key values always keep exact-key semantics.
     if attempt.get("_event_key_generated"):
         incoming_identity = attempt_identity_signature(attempt)
-        for existing_row in conn.execute("SELECT * FROM attempts ORDER BY id").fetchall():
-            existing_attempt = attempt_row_to_dict(existing_row)
-            if attempt_identity_signature(existing_attempt) == incoming_identity:
+        if identity_signatures is not None:
+            if incoming_identity in identity_signatures:
                 return False
+        else:
+            for existing_row in conn.execute("SELECT * FROM attempts ORDER BY id").fetchall():
+                existing_attempt = attempt_row_to_dict(existing_row)
+                if attempt_identity_signature(existing_attempt) == incoming_identity:
+                    return False
 
     timestamp = now_text()
     cursor = conn.execute(
@@ -751,6 +760,8 @@ def insert_attempt(conn: sqlite3.Connection, attempt: dict[str, Any]) -> bool:
             "INSERT OR IGNORE INTO attempt_entries(attempt_id, entry_key, role) VALUES(?, ?, 'related')",
             (attempt_id, key),
         )
+    if identity_signatures is not None:
+        identity_signatures.add(attempt_identity_signature(attempt))
     return True
 
 

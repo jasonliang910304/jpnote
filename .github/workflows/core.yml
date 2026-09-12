@@ -45,6 +45,6 @@ jobs:
           trap 'rm -rf "$temp_home"' EXIT
           HOME="$temp_home" sh ./install.sh
           version="$(HOME="$temp_home" "$temp_home/.local/bin/jpnote" --version)"
-          test "$version" = 'jpnote 0.7.5'
-          test -L "$temp_home/.local/lib/jpnote/0.7.5/current"
-          test -f "$temp_home/.local/lib/jpnote/0.7.5/docs/USER_GUIDE.md"
+          test "$version" = 'jpnote 0.7.5.1'
+          test -L "$temp_home/.local/lib/jpnote/0.7.5.1/current"
+          test -f "$temp_home/.local/lib/jpnote/0.7.5.1/docs/USER_GUIDE.md"

@@ -51,3 +51,4 @@
 - [ ] 視需要產生 source tar.gz／Git bundle；標為備援而非必載
 - [ ] 獨立匯出最新版 continuation prompt；標為只有新聊天才需要
 - [ ] 最終回覆以「必須下載／僅供參考／新聊天續接用」分類
+- [ ] release 完成後提供 idempotent cleanup script；artifact 已不存在時只顯示 SKIP，不視為失敗；正式 DB、undo backups、rollback retention 內 installed revisions 不自動刪除

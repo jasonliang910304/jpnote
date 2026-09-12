@@ -74,6 +74,7 @@ from .repository import (
     get_entries_by_keys,
     list_attempts,
     list_entries,
+    list_entries_full,
     list_recent_entries,
     search_entries,
     stats,
@@ -837,7 +838,7 @@ def command_list(args: argparse.Namespace) -> int:
         entries = list_entries(conn, entry_type, args.level)
     if args.select:
         with connect_readonly() as conn:
-            full_entries = [get_entry(conn, entry["key"]) or entry for entry in entries]
+            full_entries = list_entries_full(conn, entry_type, args.level)
         key = ui_fzf.select_entry(full_entries, f"選擇{args.kind}")
         if key:
             entry = next((item for item in full_entries if item["key"] == key), None)
