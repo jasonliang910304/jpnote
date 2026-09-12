@@ -7,25 +7,28 @@
 1. `docs/PROJECT_HANDOFF.md`
 2. `docs/ROADMAP.md`
 3. `docs/QUIZ_V1_SPEC.md`
-4. `docs/audits/quiz-development-handoff-2026-07-24.md`
-5. `docs/RELEASE_CHECKLIST.md`
-6. `docs/DELIVERY_GUIDE.md`
-7. README、CHANGELOG、USER_GUIDE
+4. `docs/audits/v0.7.5-performance-development.md`
+5. `docs/audits/quiz-development-handoff-2026-07-24.md`
+6. `docs/RELEASE_CHECKLIST.md`
+7. `docs/DELIVERY_GUIDE.md`
+8. README、CHANGELOG、USER_GUIDE
 
 ## 目前基準
 
 - 正式 release/tag：`jpnote v0.7.4`；annotated tag 固定指向 release commit `d6c847180e466439560769d1567048f7b382a4fb`（tag object `1c0cebf3a9d38e16b7027fd77e6f8a59c649efd6`）
-- 正式安裝版本：`jpnote 0.7.4`（actual Arch formal gate PASS）
+- 正式安裝版本：`jpnote 0.7.5` candidate（2026-09-12 actual Arch gate PASS；正式 release/tag 仍 v0.7.4）
 - v0.7.4 parent／v0.7.3 final main：`851e77add870e2a19fcbe674860828ecccf81852`
-- 目前 source baseline：v0.7.4 release 已完成；release 後只做 handoff-only documentation sync，`v0.7.4` tag 不移動；下一個 runtime target 是 v0.7.5 Performance & Architecture Cleanup
+- 目前 source HEAD 仍為 `115ce7df2618e8e8b53be9d1f977a55700c9a65c`（v0.7.4 release 後 handoff-only commit），但使用者 working tree 已套用未 commit 的 v0.7.5 early-performance patch；正式安裝也已升到 0.7.5 candidate。尚未 commit/push/tag
 - GitHub write policy：AI 不做 branch/commit/push/tag/PR/workflow 等遠端變更；GitHub 僅 read-only。AI 在隔離環境準備/驗證 patch，所有 GitHub 寫入由使用者親手完成
 - core SQLite schema：v5
 - Quiz SQLite：獨立 `quiz.db`，schema v2
 - v0.7.3 release gate：dev1 safety PASS；dev2 actual Arch PASS（455 passed, 18 subtests passed）；Windows PowerShell 5.1＋SSH real gate PASS；release-commit Core regression／Windows import client CI 全綠
 - v0.7.4 release gate（2026-09-06）：actual Arch `485 passed, 36 subtests passed`；0.7.3 → 0.7.4 正式安裝 PASS；正式 DB SHA-256/size/mtime/mode 不變；real DB copy 1019 items（150 grammar／869 vocabulary）、27 attempts、audit 29 review/0 critical；read-only Quiz planning 與 installed protocol import/quick/FK smoke PASS。release commit `d6c8471...` 已 push；release-commit 與 tag-triggered Core regression／Windows import client CI 全綠；annotated `v0.7.4` 已建立並固定指向 release commit。
+- v0.7.5 candidate（2026-09-12 actual Arch PASS）：exact parent `115ce7df...`；bundle SHA-256 `ee80c4279aa7aac4c9cd413e14e25745c608a71bd9f72ab4fe9f643b4bfe7300`。Quiz prepared vocabulary pool＋unordered pair exclusion、shortage plan reuse、`recent --days N`、romaji long-vowel/equivalence fix 已實作。assistant clean-apply/segmented gate PASS；actual Arch real fzf＋full repository `495 passed, 36 subtests passed`。正式機 897 vocab／27 attempts 的 read-only Quiz planning total 0.915s；0.7.4 → 0.7.5 install PASS；formal DB 1050/153/897/27，quick/FK PASS，gate 前後 SHA-256 `c0463ac4533cb691c92b1ca3ed0229ea3dc8551a537528a9621c275f136fba70`、size/mtime/mode 不變。尚未 commit/push/tag。
+- formal DB content：2026-09-07 已完成 16 個同-key corrections；2026-09-12 DB 已成長為 1050/153/897/27，並在 v0.7.5 actual gate 後完成第二包 8 個同-key corrections：`定員`／`経営方針`／`騒音` canonical romaji，以及 `アンケート`／`セーター`／`プラン`／`プレゼン`／`ボウリング` origin metadata。正式匯入後 quick/FK PASS、DB SHA-256=`bb4dbf7943a6d87f2ac73ed5db1c88dc7568556c26e63ce76a86ecdedc46b6d9`；audit 只剩 10 個刻意保留的多例句 review＋`または ma ta wa` fail-closed review。不要把 `または` 無上下文自動改成 `ma ta ha`。
 - Quiz 開發已完成 Phase 1–4，以及 Phase 5 TUI、usability/question-quality、正式 CLI/config、互動式 filters/history navigation、history 逐題檢視與隔離安裝 smoke
 - v0.7.1 最新完整測試：`401 passed, 18 subtests passed`；targeted `16 passed`
-- app-only coverage：`76%`
+- v0.7.5 app-only coverage：`77%`（9184 statements / 2068 missed）
 - v0.7.1 versioned isolated install、正式安裝、正式 DB 保護與 read-only copy smoke：PASS；audit 無 critical／needs_input
 - post-release commits：`a660950`（是非題回饋標籤）、`74fb82a`（`paste --stdin`）
 - `paste --stdin` targeted regression：`13 passed`；temporary-data installed smoke：PASS
@@ -98,15 +101,17 @@ jpnote --version
 
 ## 下一個正確工作項目
 
-Deep Adversarial Audit 已完成（Blocking 0 / High 1 / Medium 16 / Low–Medium 2；19 findings），v0.7.4 correctness/safety release 亦已正式完成。不要再修改或移動 `v0.7.4` tag；下一個 runtime 工作直接進 v0.7.5 Performance & Architecture Cleanup。
+Deep Adversarial Audit 與 v0.7.4 correctness/safety release 已完成。不要修改或移動 `v0.7.4` tag。v0.7.5 early-performance candidate 的 clean-apply、actual Arch gate 與 post-gate data correction 都已完成；現在直接工作是同步最終 docs → 使用者 review/commit/push → CI PASS 後建立 v0.7.5 annotated tag。不要重做已完成的廣域 audit。
 
 後續固定排程：
 
-1. v0.7.5 Performance & Architecture Cleanup；功能等價/資料安全優先，shared snapshot/bulk hydration/index，並 bounded dead-code removal。必要時拆 0.7.5.1/2/3/4，每段必須可獨立正常使用。
-2. v0.7.6 Search + Quiz/UI correctness：`imasu` overmatch、core/fzf ranking、`○／×`、reorder 完整句、history/hanging-indent 等。basic homophone guard 已存在，不當作未實作 foundation。
-3. v0.7.7 crash/filesystem/CI hardening。
-4. v0.8.0 Tailscale-only Web/PWA/mobile architecture。
-5. v0.8.x+ learning/data features。
+1. 同步 v0.7.5 最終 post-gate/post-correction docs；actual Arch runtime gate 與正式資料 correction 都已 PASS，不需重跑。
+2. 使用者在本機 review `git diff` 後 commit/push；等待 Core/Windows CI 全綠，再由使用者建立 annotated `v0.7.5` tag。AI 不做 GitHub write。
+3. release 後接續 v0.7.5.x Performance & Architecture Cleanup：shared snapshot/bulk hydration/index、attempt identity、parse payload/fzf/read-path scaling、dynamic loading 與 bounded dead-code removal。每段必須可獨立正常使用。
+4. v0.7.6 Search + Quiz/UI correctness：`imasu` overmatch、core/fzf ranking、`○／×`、reorder 完整句、history/hanging-indent 等。basic homophone guard 已存在，不當作未實作 foundation。
+5. v0.7.7 crash/filesystem/CI hardening。
+6. v0.8.0 Tailscale-only Web/PWA/mobile architecture。
+7. v0.8.x+ learning/data features。
 
 不要再啟動無邊界廣域 audit；19 findings 與舊 backlog 已整合到 roadmap。
 
@@ -124,4 +129,5 @@ Deep Adversarial Audit 已完成（Blocking 0 / High 1 / Medium 16 / Low–Mediu
 - 不因非 blocking finding 重啟廣域健檢或延後 Quiz。
 - 每次狀態/下一步/schema/測試基線變更都同步 handoff、roadmap、continuation prompt 與 audit。
 - 每次成功 dev gate／release 固定執行垃圾清理：obsolete patch／validation script／SHA sidecar／snapshot archive／stale temp dir／已被成功結果取代的 failed log；保留最新成功 log、正式 DB safety backup、rollback/release artifacts。失敗時先保留診斷檔，成功後再清。
+- future actual-gate scripts：完整 pytest raw output 保留在 log；終端顯示盡量使用固定寬度／分組進度摘要，避免 raw dots 因 terminal width 換行造成視覺不整齊。
 - 使用者環境是 Arch Linux + Hyprland；編輯器預設 nvim。

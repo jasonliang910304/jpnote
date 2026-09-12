@@ -1,4 +1,14 @@
 # Changelog
+## 0.7.5 — 2026-09-12
+
+- Quiz vocabulary pool startup performance：每個 entry 的 normalized names／reading／meaning／review-group features 只建立一次；對稱 safe-pair 只判斷一次並建立 exclusion set，同一 source 的 MCQ／True-False 重用 safe candidates 與 meaning metadata。固定 seed 的題目 identity／prompt／choices／answer semantics 保持等價。
+- 題庫不足確認改為直接持久化第一次建立的 immutable `QuestionPoolPlan`，不再第二次讀取 core source 或重建整份題庫。
+- 新增 `jpnote recent --days N`：包含今天在內的最近 N 個本機日曆日；與 `--date`／`--since` 互斥，既有不帶參數與 `--source`／`--type` 行為不變。
+- spaced Hepburn 修正長音後續獨立 mora 被吞掉的情況，例如 `ていいん → tē i n`、`けいえいほうしん → kē ē hō shi n`、`そうおん → sō o n`；romaji equivalence 改為 canonical 單向判定，避免 `tē n` 之類少 mora 值被反向 expansion 誤判等價。助詞 `は` 的語境發音仍維持 fail-closed review，不做無上下文猜測。
+- 真實 869-vocabulary snapshot 的 assistant-isolated benchmark（正式 release gate 前）：baseline 400-source builder 約 10.43s，candidate 約 0.53s；fresh clean-applied candidate 869-source builder 約 0.95s、含 source hydration 約 1.05s。100／200／400 fixed-seed identity SHA-256 與 baseline 完全一致。
+- source／installer version 更新為 0.7.5 candidate；core schema 維持 v5、Quiz schema 維持 v2、public import JSON schema 不變。fresh-checkout artifact gate 的 `git apply --check`／actual apply／diff-check／19-path byte equality PASS；clean-applied targeted `133 passed` 與 isolated install smoke PASS；assistant 分段完整 suite `494 passed, 1 skipped, 36 subtests`（唯一 skip 為容器缺 real fzf）。
+- 2026-09-12 actual Arch gate PASS：real fzf `0.74.3`、完整 repository `495 passed, 36 subtests passed`；正式機 read-only Quiz planning 在 897 vocabulary／27 attempt sources 下 available 4918、selected 10，hydrate 0.116s、build 0.800s、total 0.915s。0.7.4 → 0.7.5 正式 install PASS；正式 DB 1050 items（153 grammar／897 vocabulary）、27 attempts，`quick_check=ok`、FK violations 0，且安裝／read-only gate 前後 DB SHA-256 `c0463ac4533cb691c92b1ca3ed0229ea3dc8551a537528a9621c275f136fba70`、size 1536000、mtime、mode 完全不變。gate 後另完成 8 個同-key formal data corrections；再次 quick/FK PASS，audit 只剩 10 個刻意多例句 review＋`または` fail-closed review，DB SHA-256=`bb4dbf7943a6d87f2ac73ed5db1c88dc7568556c26e63ce76a86ecdedc46b6d9`。release commit／push／tag 尚未進行。
+
 ## 0.7.4 — 2026-09-06
 
 - Deep Adversarial Audit correctness/safety remediation：restore/undo 在正式 DB replace 前加入 side-effect-free compatibility gate，並在 copy 後重新驗證 exact private snapshot；future schema、foreign SQLite 與 migration 後仍不可用的結構不再能覆蓋正式 DB。

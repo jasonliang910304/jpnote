@@ -12,7 +12,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -931,9 +931,26 @@ def command_browse(args: argparse.Namespace) -> int:
         return 0
 
 
+def _positive_days(value: str) -> int:
+    try:
+        days = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("--days 必須是正整數") from exc
+    if days < 1:
+        raise argparse.ArgumentTypeError("--days 必須是正整數")
+    return days
+
+
+def _recent_since_date(days: int, *, today: date | None = None) -> str:
+    current_day = today or datetime.now().astimezone().date()
+    return (current_day - timedelta(days=days - 1)).isoformat()
+
+
 def _recent_period(args: argparse.Namespace) -> str:
     if args.date:
         return args.date
+    if args.days is not None:
+        return f"最近 {args.days} 天"
     if args.since:
         return f"{args.since} 以後"
     return datetime.now().astimezone().date().isoformat()
@@ -945,8 +962,11 @@ def command_recent(args: argparse.Namespace) -> int:
         entry_type = "grammar"
     elif args.kind == "vocab":
         entry_type = "vocabulary"
+    since_date = args.since
+    if args.days is not None:
+        since_date = _recent_since_date(args.days)
     with connect_readonly() as conn:
-        entries = list_recent_entries(conn, args.date, args.since, entry_type, args.source)
+        entries = list_recent_entries(conn, args.date, since_date, entry_type, args.source)
     if args.format == "json":
         _json(entries)
         return 0 if entries else 1
@@ -1829,8 +1849,14 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("recent", help="查看今天或指定日期範圍內新增／更新的項目")
     p.add_argument("--type", dest="kind", choices=("grammar", "vocab"), help="只看文法或單字")
     p.add_argument("--source", help="只看具有指定來源標籤的項目（完全比對）")
-    p.add_argument("--date", help="只看指定本地日期（YYYY-MM-DD）；預設今天")
-    p.add_argument("--since", help="查看指定本地日期起的變更（YYYY-MM-DD）")
+    period = p.add_mutually_exclusive_group()
+    period.add_argument("--date", help="只看指定本地日期（YYYY-MM-DD）；預設今天")
+    period.add_argument("--since", help="查看指定本地日期起的變更（YYYY-MM-DD）")
+    period.add_argument(
+        "--days",
+        type=_positive_days,
+        help="查看包含今天在內最近 N 個本地日曆日（例如 2 = 今天＋昨天）",
+    )
     p.add_argument("--all", action="store_true", help="直接列出全部結果，不開 fzf")
     p.add_argument("--no-fzf", action="store_true", help="停用 fzf，直接列出")
     _add_format(p)

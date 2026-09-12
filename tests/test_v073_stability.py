@@ -560,7 +560,7 @@ class CoreCiContractTests(unittest.TestCase):
         self.assertIn("actions/setup-python@v6", workflow)
 
     def test_current_release_declares_python_310_minimum(self) -> None:
-        self.assertEqual(VERSION, "0.7.4")
+        self.assertEqual(VERSION, "0.7.5")
         installer = (ROOT / "install.sh").read_text(encoding="utf-8")
         guide = (ROOT / "docs" / "USER_GUIDE.md").read_text(encoding="utf-8")
         self.assertIn('MIN_PYTHON="3.10"', installer)

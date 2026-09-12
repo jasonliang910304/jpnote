@@ -84,6 +84,10 @@ def _initial_consonant(token: str) -> str:
     return token[0] if token and token[0] not in "aeiou" else ""
 
 
+def _has_macron(token: str) -> bool:
+    return any(mark in token for mark in _MACRON.values())
+
+
 def spaced_hepburn(reading: str) -> str:
     kana = katakana_to_hiragana(reading.strip())
     raw: list[str] = []
@@ -131,17 +135,26 @@ def spaced_hepburn(reading: str) -> str:
         return ""
 
     # Collapse common orthographic long-vowel sequences into a macron while
-    # preserving mora separation elsewhere.
+    # preserving mora separation elsewhere.  Once a token already carries a
+    # macron, the lengthening mora has been consumed.  A following vowel must
+    # therefore remain independent instead of being swallowed into the same
+    # token (e.g. ていいん -> tē i n, そうおん -> sō o n).
     result: list[str] = []
     for token in raw:
-        if result and token in {"u", "o"} and _last_vowel(result[-1]) == "o":
-            result[-1] = _lengthen(result[-1])
-        elif result and token == "u" and _last_vowel(result[-1]) == "u":
-            result[-1] = _lengthen(result[-1])
-        elif result and token == "i" and _last_vowel(result[-1]) == "e":
-            result[-1] = _lengthen(result[-1])
-        elif result and token in {"a", "i", "u", "e", "o"} and _last_vowel(result[-1]) == token:
-            result[-1] = _lengthen(result[-1])
+        previous = result[-1] if result else ""
+        can_lengthen = bool(previous) and not _has_macron(previous)
+        if can_lengthen and token in {"u", "o"} and _last_vowel(previous) == "o":
+            result[-1] = _lengthen(previous)
+        elif can_lengthen and token == "u" and _last_vowel(previous) == "u":
+            result[-1] = _lengthen(previous)
+        elif can_lengthen and token == "i" and _last_vowel(previous) == "e":
+            result[-1] = _lengthen(previous)
+        elif (
+            can_lengthen
+            and token in {"a", "i", "u", "e", "o"}
+            and _last_vowel(previous) == token
+        ):
+            result[-1] = _lengthen(previous)
         else:
             result.append(token)
     return " ".join(result)

@@ -241,11 +241,27 @@ class QuizService:
             return QuizStartResult(status="no_safe_questions", plan=plan)
         if plan.report.has_shortage and not allow_shortage:
             return QuizStartResult(status="confirmation_required", plan=plan)
+        return self.start_planned_session(plan)
 
+    def start_planned_session(self, plan: QuestionPoolPlan) -> QuizStartResult:
+        """Persist one already-built immutable plan without rebuilding sources.
+
+        This is the explicit continuation for a caller that already presented a
+        shortage plan to the user and received confirmation.  Re-reading core
+        sources here would waste work and could also produce a different plan if
+        the source dataset changed between confirmation and persistence.
+        """
+
+        if not isinstance(plan, QuestionPoolPlan):
+            raise TypeError("plan 必須是 QuestionPoolPlan")
+        if not plan.report.can_start or not plan.questions:
+            return QuizStartResult(status="no_safe_questions", plan=plan)
+        if plan.report.selected_count != len(plan.questions):
+            raise QuizValidationError("Quiz plan selected_count 與實際題數不一致")
         session = self._session_store.create_session(
-            mode=mode,
+            mode=plan.report.mode,
             questions=plan.questions,
-            requested_count=requested_count,
+            requested_count=plan.report.requested_count,
         )
         return QuizStartResult(status="started", plan=plan, session=session)
 

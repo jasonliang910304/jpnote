@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 from jpnote_app.study_sources import AttemptReplaySource, EntrySnapshot
 
-from .generators import QuestionGenerator
+from .generators import PreparedVocabularyPool, PreparedVocabularySource, QuestionGenerator
 from .session_models import GeneratedQuestionSnapshot
 
 QUIZ_MODES = frozenset({"mixed", "vocabulary", "mistake"})
@@ -93,6 +93,8 @@ def _vocabulary_variants(
     generator: QuestionGenerator,
     source: EntrySnapshot,
     pool: Sequence[EntrySnapshot],
+    *,
+    prepared: PreparedVocabularySource | None = None,
 ) -> tuple[GeneratedQuestionSnapshot, ...]:
     questions: list[GeneratedQuestionSnapshot] = []
     seen: set[tuple[object, ...]] = set()
@@ -101,7 +103,9 @@ def _vocabulary_variants(
         _append_unique(
             questions,
             seen,
-            generator.vocabulary_four_choice(source, pool, direction=direction),
+            generator.vocabulary_four_choice(
+                source, pool, direction=direction, _prepared=prepared
+            ),
         )
 
     _append_unique(
@@ -111,6 +115,7 @@ def _vocabulary_variants(
             source,
             pool,
             prefer_false=False,
+            _prepared=prepared,
         ),
     )
     _append_unique(
@@ -120,6 +125,7 @@ def _vocabulary_variants(
             source,
             pool,
             prefer_false=True,
+            _prepared=prepared,
         ),
     )
     _append_unique(
@@ -257,9 +263,15 @@ class QuestionPoolBuilder:
         skipped_mistakes = 0
 
         if mode in {"mixed", "vocabulary"}:
+            prepared_vocabulary = PreparedVocabularyPool(vocabulary_sources)
             for source in vocabulary_sources:
                 variants = list(
-                    _vocabulary_variants(generator, source, vocabulary_sources)
+                    _vocabulary_variants(
+                        generator,
+                        source,
+                        vocabulary_sources,
+                        prepared=prepared_vocabulary.for_source(source),
+                    )
                 )
                 if variants:
                     groups[("vocabulary", source.key)] = variants

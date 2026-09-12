@@ -257,6 +257,29 @@ def test_allow_shortage_persists_only_safe_questions(tmp_path):
     assert result.session.summary.question_count == 1
 
 
+def test_confirmed_shortage_reuses_existing_plan_without_rereading_sources(tmp_path):
+    reader = FakeReader(attempts=(reorder_attempt(),))
+    quiz = QuizService(reader, QuizSessionStore(tmp_path / "quiz.db"))
+    pending = quiz.start_session(
+        mode="mistake",
+        requested_count=10,
+        seed="reuse-shortage",
+    )
+    assert pending.requires_confirmation
+    entry_calls = tuple(reader.entry_calls)
+    attempt_calls = tuple(reader.attempt_calls)
+
+    started = quiz.start_planned_session(pending.plan)
+
+    assert started.started
+    assert started.plan is pending.plan
+    assert tuple(reader.entry_calls) == entry_calls
+    assert tuple(reader.attempt_calls) == attempt_calls
+    assert started.session is not None
+    assert started.session.summary.requested_count == 10
+    assert started.session.summary.question_count == 1
+
+
 def test_start_persists_exact_planned_question_snapshots(service):
     plan = service.plan_session(mode="mixed", requested_count=5, seed="same")
     result = service.start_session(

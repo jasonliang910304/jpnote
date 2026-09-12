@@ -1,10 +1,20 @@
-# jpnote v0.7.4
+# jpnote v0.7.5
 
 > **專案聲明**
 >
 > jpnote 的構想、功能需求、使用情境與開發方向由 **Jason Liang** 提供；本專案的所有程式碼均由 **OpenAI ChatGPT** 產生。Jason Liang 負責實際使用、測試、問題回報，以及功能與設計取捨。
 
 本版將原本 1,200 多行的單檔腳本拆成可重用的核心模組與可選介面層。
+
+## v0.7.5 Performance / Quiz early optimization（candidate）
+
+v0.7.5 先把資料量成長後最明顯的 Quiz 啟動瓶頸提前處理，同時保持 core schema v5、Quiz schema v2 與 public import JSON schema 不變。
+
+- Quiz vocabulary generation 一次預先建立 normalized safety features，對稱 pair 只判斷一次；同一 source 的 MCQ／True-False 共用 safe-candidate 與 meaning metadata。固定 seed 下 prompt、choices、answer 與 selection semantics 維持等價。
+- 題庫不足確認直接使用第一次已建立的 immutable plan，不再重新讀取 core sources／重新生成整份題庫。
+- `jpnote recent --days N` 以本機日曆日查看包含今天在內最近 N 天的新增／更新資料；與 `--date`／`--since` 互斥。
+- 修正 spaced Hepburn 長音壓縮會吞掉後續獨立 mora 的問題，並讓 romaji equivalence 以 reading-derived canonical 方向為權威，避免把少一個 mora 的舊值誤判成等價。
+- 2026-09-12 actual Arch gate：`495 passed, 36 subtests passed`（含 real fzf）；897 vocabulary／27 attempt sources 的 read-only Quiz planning total 約 `0.915s`。0.7.4 → 0.7.5 正式安裝 PASS，正式 DB fingerprint 安裝前後完全不變；目前仍是 unreleased candidate，GitHub release/tag 尚未建立。
 
 ## v0.7.4 Deep-audit correctness / safety
 
@@ -391,13 +401,13 @@ jpnote recent --format json           # 結構化輸出
 ## 安裝
 
 ```bash
-mkdir -p /tmp/jpnote-v0.7.4
+mkdir -p /tmp/jpnote-v0.7.5
 
-tar -xzf ~/Downloads/jpnote-v0.7.4.tar.gz \
-  -C /tmp/jpnote-v0.7.4 \
+tar -xzf ~/Downloads/jpnote-v0.7.5.tar.gz \
+  -C /tmp/jpnote-v0.7.5 \
   --strip-components=1
 
-/tmp/jpnote-v0.7.4/install.sh
+/tmp/jpnote-v0.7.5/install.sh
 jpnote init
 ```
 

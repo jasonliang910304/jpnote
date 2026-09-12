@@ -17,10 +17,11 @@ def romaji_is_equivalent(stored: str, canonical: str) -> bool:
         return False
     if stored_compact == canonical_compact:
         return True
-    return (
-        stored_compact in romaji_variants(canonical)
-        or canonical_compact in romaji_variants(stored)
-    )
+    # Canonical reading-derived romaji is the authority.  Expanding the stored
+    # value in the reverse direction can hide a dropped mora: for example
+    # ``tē n`` expands to ``tein`` and would otherwise be accepted as
+    # equivalent to the correct ``tē i n``.
+    return stored_compact in romaji_variants(canonical)
 
 
 def canonical_romaji_for_reading(reading: str) -> str:

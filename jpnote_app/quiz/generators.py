@@ -10,6 +10,7 @@ import random
 import re
 import unicodedata
 from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
 
 from jpnote_app.study_sources import AttemptReplaySource, EntrySnapshot
 
@@ -116,6 +117,163 @@ def _meaning_sets_overlap(left: EntrySnapshot, right: EntrySnapshot) -> bool:
             if left_value in right_value or right_value in left_value:
                 return True
     return False
+
+
+@dataclass(frozen=True, slots=True)
+class _VocabularyFeatures:
+    entry: EntrySnapshot
+    names: frozenset[str]
+    reading_marker: str
+    meaning_markers: frozenset[str]
+    meaning_summary: str
+    review_group_marker: str
+
+
+def _vocabulary_features(entry: EntrySnapshot) -> _VocabularyFeatures:
+    meaning_parts = _meaning_parts(entry)
+    return _VocabularyFeatures(
+        entry=entry,
+        names=_entry_names(entry),
+        reading_marker=_normalize_text(entry.reading),
+        meaning_markers=frozenset(
+            marker
+            for marker in (_semantic_text(value) for value in meaning_parts)
+            if marker
+        ),
+        meaning_summary="；".join(meaning_parts),
+        review_group_marker=_normalize_text(entry.review_group),
+    )
+
+
+def _meaning_markers_overlap(
+    left_markers: frozenset[str],
+    right_markers: frozenset[str],
+) -> bool:
+    if left_markers & right_markers:
+        return True
+    for left_value in left_markers:
+        for right_value in right_markers:
+            if left_value in right_value or right_value in left_value:
+                return True
+    return False
+
+
+def _safe_vocabulary_feature_pair(
+    source: _VocabularyFeatures,
+    candidate: _VocabularyFeatures,
+) -> bool:
+    source_entry = source.entry
+    candidate_entry = candidate.entry
+    if source_entry.key == candidate_entry.key:
+        return False
+    if source_entry.entry_type != "vocabulary" or candidate_entry.entry_type != "vocabulary":
+        return False
+    if not source_entry.display.strip() or not candidate_entry.display.strip():
+        return False
+    if source.names & candidate.names:
+        return False
+    if source.reading_marker and source.reading_marker == candidate.reading_marker:
+        return False
+    if _meaning_markers_overlap(source.meaning_markers, candidate.meaning_markers):
+        return False
+    if (
+        source_entry.review_group.strip()
+        and candidate_entry.review_group.strip()
+        and source.review_group_marker == candidate.review_group_marker
+    ):
+        return False
+    return True
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedVocabularySource:
+    """One source's reusable safety result for a prepared vocabulary pool."""
+
+    candidates: tuple[EntrySnapshot, ...]
+    meaning_candidates: tuple[tuple[EntrySnapshot, str], ...]
+    source_meaning: str
+    prompt_term: str
+
+
+class PreparedVocabularyPool:
+    """Precompute normalized pool features once without changing Quiz semantics."""
+
+    __slots__ = (
+        "entries",
+        "_features",
+        "_features_by_key",
+        "_reading_keys",
+        "_unsafe_keys",
+    )
+
+    def __init__(self, entries: Iterable[EntrySnapshot]) -> None:
+        self.entries = tuple(entries)
+        self._features = tuple(_vocabulary_features(entry) for entry in self.entries)
+        self._features_by_key = {feature.entry.key: feature for feature in self._features}
+        reading_keys: dict[str, set[str]] = {}
+        for feature in self._features:
+            if feature.reading_marker:
+                reading_keys.setdefault(feature.reading_marker, set()).add(feature.entry.key)
+        self._reading_keys = {
+            marker: frozenset(keys) for marker, keys in reading_keys.items()
+        }
+
+        # Pair safety is symmetric.  Compute every unordered pair once, then
+        # reuse the exclusion sets for each source instead of repeating all
+        # normalization/overlap checks in both directions.
+        unsafe_keys: dict[str, set[str]] = {
+            feature.entry.key: {feature.entry.key} for feature in self._features
+        }
+        for index, source_features in enumerate(self._features):
+            for candidate_features in self._features[index + 1 :]:
+                if _safe_vocabulary_feature_pair(source_features, candidate_features):
+                    continue
+                source_key = source_features.entry.key
+                candidate_key = candidate_features.entry.key
+                unsafe_keys[source_key].add(candidate_key)
+                unsafe_keys[candidate_key].add(source_key)
+        self._unsafe_keys = {
+            key: frozenset(values) for key, values in unsafe_keys.items()
+        }
+
+    def for_source(self, source: EntrySnapshot) -> PreparedVocabularySource:
+        source_features = self._features_by_key.get(source.key)
+        if source_features is None:
+            source_features = _vocabulary_features(source)
+
+        candidates: list[EntrySnapshot] = []
+        meaning_candidates: list[tuple[EntrySnapshot, str]] = []
+        seen_keys: set[str] = set()
+        unsafe_keys = self._unsafe_keys.get(source.key)
+        for candidate_features in self._features:
+            candidate = candidate_features.entry
+            if candidate.key in seen_keys:
+                continue
+            if unsafe_keys is None:
+                if not _safe_vocabulary_feature_pair(source_features, candidate_features):
+                    continue
+            elif candidate.key in unsafe_keys:
+                continue
+            seen_keys.add(candidate.key)
+            candidates.append(candidate)
+            if candidate_features.meaning_summary:
+                meaning_candidates.append((candidate, candidate_features.meaning_summary))
+
+        display = source.display.strip()
+        reading = source.reading.strip()
+        prompt_term = display
+        if display and reading and _KANJI_RANGE.search(display):
+            reading_marker = source_features.reading_marker
+            ambiguous_keys = self._reading_keys.get(reading_marker, frozenset())
+            if reading_marker and not (ambiguous_keys - {source.key}):
+                prompt_term = reading
+
+        return PreparedVocabularySource(
+            candidates=tuple(candidates),
+            meaning_candidates=tuple(meaning_candidates),
+            source_meaning=source_features.meaning_summary,
+            prompt_term=prompt_term,
+        )
 
 
 def _safe_vocabulary_pair(source: EntrySnapshot, candidate: EntrySnapshot) -> bool:
@@ -228,16 +386,23 @@ class QuestionGenerator:
         pool: Iterable[EntrySnapshot],
         *,
         direction: str,
+        _prepared: PreparedVocabularySource | None = None,
     ) -> GeneratedQuestionSnapshot | None:
         if direction not in {"ja_to_zh", "zh_to_ja"}:
             raise ValueError(f"不支援的 vocabulary direction：{direction}")
         if source.entry_type != "vocabulary" or not source.display.strip():
             return None
-        source_meaning = _meaning_summary(source)
+        source_meaning = (
+            _meaning_summary(source) if _prepared is None else _prepared.source_meaning
+        )
         if not source_meaning:
             return None
-        pool_items = tuple(pool)
-        candidates = list(_stable_vocabulary_candidates(source, pool_items))
+        pool_items = tuple(pool) if _prepared is None else ()
+        candidates = list(
+            _stable_vocabulary_candidates(source, pool_items)
+            if _prepared is None
+            else _prepared.candidates
+        )
         self._random.shuffle(candidates)
 
         distractors: list[QuestionChoiceSnapshot] = []
@@ -262,7 +427,11 @@ class QuestionGenerator:
 
         correct_choice = _choice_from_entry(source, correct_text)
         if direction == "ja_to_zh":
-            prompt_term = _preferred_vocabulary_prompt(source, pool_items)
+            prompt_term = (
+                _preferred_vocabulary_prompt(source, pool_items)
+                if _prepared is None
+                else _prepared.prompt_term
+            )
             prompt = f"「{prompt_term}」的中文意思是？"
             question_type = "vocab_ja_to_zh_mcq"
         else:
@@ -288,32 +457,38 @@ class QuestionGenerator:
         pool: Iterable[EntrySnapshot] = (),
         *,
         prefer_false: bool | None = None,
+        _prepared: PreparedVocabularySource | None = None,
     ) -> GeneratedQuestionSnapshot | None:
         if source.entry_type != "vocabulary" or not source.display.strip():
             return None
-        pool_items = tuple(pool)
-        source_meaning = _meaning_summary(source)
+        pool_items = tuple(pool) if _prepared is None else ()
+        source_meaning = (
+            _meaning_summary(source) if _prepared is None else _prepared.source_meaning
+        )
         if not source_meaning:
             return None
         make_false = self._random.choice((False, True)) if prefer_false is None else prefer_false
         shown_meaning = source_meaning
         is_true = True
         if make_false:
-            candidates = [
-                candidate
-                for candidate in _stable_vocabulary_candidates(source, pool_items)
-                if _meaning_summary(candidate)
-            ]
-            if candidates:
-                shown_meaning = self._random.choice(candidates)
-                shown_meaning = _meaning_summary(shown_meaning)
+            if _prepared is None:
+                candidates = [
+                    candidate
+                    for candidate in _stable_vocabulary_candidates(source, pool_items)
+                    if _meaning_summary(candidate)
+                ]
+                if candidates:
+                    shown_meaning = _meaning_summary(self._random.choice(candidates))
+                    is_true = False
+            elif _prepared.meaning_candidates:
+                _, shown_meaning = self._random.choice(_prepared.meaning_candidates)
                 is_true = False
         return _question(
             question_type="vocab_meaning_true_false",
             source_kind="vocabulary",
             source_key=source.key,
             prompt=(
-                f"「{_preferred_vocabulary_prompt(source, pool_items)}」"
+                f"「{_preferred_vocabulary_prompt(source, pool_items) if _prepared is None else _prepared.prompt_term}」"
                 f"的意思是「{shown_meaning}」。"
             ),
             choices=_TRUTH_CHOICES,

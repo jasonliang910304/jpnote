@@ -13,6 +13,7 @@ import unicodedata
 from dataclasses import dataclass, field
 from typing import Callable, Protocol, Sequence
 
+from .question_pool import QuestionPoolPlan
 from .service import (
     QuizAnswerFeedback,
     QuizServiceError,
@@ -84,6 +85,8 @@ class QuizTuiService(Protocol):
         seed: int | str | bytes | None = None,
         allow_shortage: bool = False,
     ) -> QuizStartResult: ...
+
+    def start_planned_session(self, plan: QuestionPoolPlan) -> QuizStartResult: ...
 
     def current_question(self, session_id: str) -> QuestionEventSnapshot | None: ...
 
@@ -579,7 +582,13 @@ class QuizTuiController:
 
     def _handle_shortage(self, key: str) -> None:
         if key in {"ENTER", "SPACE", "y"}:
-            self._start_session(allow_shortage=True)
+            pending = self.state.shortage_result
+            if pending is None:
+                self.state.screen = "setup"
+                return
+            result = self.service.start_planned_session(pending.plan)
+            assert result.session is not None
+            self._load_session(result.session.summary.session_id)
         elif key in {"q", "ESC", "n"}:
             self.state.shortage_result = None
             self.state.screen = "setup"

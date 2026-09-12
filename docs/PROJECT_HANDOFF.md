@@ -1,15 +1,54 @@
 # jpnote 專案交接紀錄
 
-最後更新：2026-09-06（Asia/Taipei）
+最後更新：2026-09-12（Asia/Taipei）
 正式 release/tag：`jpnote v0.7.4`；annotated tag 固定指向 release commit `d6c847180e466439560769d1567048f7b382a4fb`
-正式安裝版本：`jpnote 0.7.4`（2026-09-06 actual Arch formal gate PASS）
-目前開發 checkpoint：v0.7.4 correctness/safety release 已完成；release commit、`main` push、branch CI、annotated tag 與 tag-triggered CI 全部 PASS。此文件為 release 後 handoff-only sync；`v0.7.4` tag 不移動。下一個 runtime 工作是 v0.7.5 Performance & Architecture Cleanup。AI 不修改 GitHub 遠端。
+正式安裝版本：`jpnote 0.7.5` candidate（2026-09-12 actual Arch gate PASS；尚未 release/tag）
+目前開發 checkpoint：正式 release/tag 仍是 v0.7.4；使用者本機 repository 仍以 `115ce7df2618e8e8b53be9d1f977a55700c9a65c` 為 HEAD，但已套用未 commit 的 v0.7.5 early-performance patch，且正式安裝版本已是 0.7.5 candidate。2026-09-12 actual Arch full regression／real-fzf／install／formal-DB immutability gate 全 PASS；post-gate data correction 也已完成。下一步只剩同步最終 docs、由使用者 review/commit/push，等待 CI 成功後再建立 v0.7.5 annotated tag。`v0.7.4` tag 不移動。AI 不修改 GitHub 遠端。
 
 用途：讓新的 ChatGPT 對話或新的開發工作階段，不依賴舊聊天內容也能直接接續工作。
 
 ---
 
 ## 1. 目前可信基準
+
+### 2026-09-12 v0.7.5 early-performance candidate（actual Arch PASS；尚未 release）
+
+```text
+exact parent/main=115ce7df2618e8e8b53be9d1f977a55700c9a65c
+user bundle SHA-256=ee80c4279aa7aac4c9cd413e14e25745c608a71bd9f72ab4fe9f643b4bfe7300
+source VERSION=0.7.5 candidate
+formal installed version=0.7.5 candidate; formal release/tag=0.7.4
+core schema=5
+Quiz schema=2
+public import JSON schema=unchanged
+GitHub writes=none
+```
+
+本 candidate 先提前處理使用者已明顯感受到的 Quiz 啟動延遲，不等待整個 v0.7.5 architecture cleanup：
+
+- vocabulary generator 對每個 entry 的 normalized names／reading／meaning／review-group features 只建一次；safe-pair 因為規則對稱，只檢查 unordered pair 一次並建立 exclusion sets；同一 source 的不同題型重用 candidates／meaning metadata。仍保留原 candidate 順序與 RNG/shuffle 語意。
+- shortage confirmation 改為持久化第一次已呈現給使用者的 immutable `QuestionPoolPlan`，不再第二次讀 core source／重建題庫。
+- 新增 `jpnote recent --days N`，以本機日曆日期計算並包含今天；`--days 2`＝今天＋昨天，且與 `--date`／`--since` 互斥。
+- romaji converter 修正已形成長音後又吞掉下一個獨立 mora 的問題；equivalence 以 reading-derived canonical 單向判定，避免少 mora 值被 stored-side expansion 誤判為等價。無上下文助詞 `は` 仍 fail closed，不猜成 `wa`。
+
+真實 869-vocabulary snapshot 的 assistant-isolated benchmark（同 Python/container、fixed seed）：
+
+```text
+source count   v0.7.4 builder   v0.7.5 candidate   identity SHA-256 equal
+100            0.557s           0.058s              yes
+200            2.867s           0.210s              yes
+400            10.429s          0.530s              yes
+869            old full run exceeded bounded tool window; candidate 0.948s
+candidate 869 hydration + build ≈ 1.048s
+```
+
+100／200／400 的 selected question identity hash 與 baseline 完全一致；另有 prepared-vs-legacy variant regression、homophone/alias/meaning/review-group collision coverage 與 feature/pair-count scaling regression。assistant 分段 repository gate 已覆蓋全部 **495 collected tests**：`494 passed, 1 skipped, 36 subtests passed`；唯一 skip 是容器沒有 real fzf。Quiz 全模組 `205 passed, 6 subtests`；isolated installation/path tests 亦逐項 PASS。最終 patch 已在第二個由同 bundle 建立的 fresh checkout 上 `git apply --check`／實際 apply／`git diff --check` PASS，19 個變更檔與開發 worktree逐 byte 相同；clean-applied targeted regression `133 passed`、compileall／source version／Quiz help／`recent --days` help／isolated 0.7.5 install smoke 全 PASS。**2026-09-12 actual Arch gate 亦 PASS**：real fzf `0.74.3`；完整 repository `495 passed, 36 subtests passed`；read-only Quiz planning 為 897 vocabulary／27 attempts、available 4918、selected 10、hydrate 0.116s、build 0.800s、total 0.915s；0.7.4 → 0.7.5 formal install PASS。正式 DB 為 1050 items（153 grammar／897 vocabulary）、27 attempts，`quick_check=ok`、FK violations 0；gate 前後 SHA-256 `c0463ac4533cb691c92b1ca3ed0229ea3dc8551a537528a9621c275f136fba70`、size 1536000、mtime/mode 完全不變。
+
+2026-09-07 正式 DB content correction 已由使用者在 v0.7.4 完成：16 個同-key updates，1019 items／150 grammar／869 vocab／27 attempts 維持不變。2026-09-12 actual DB 已成長至 1050 items／153 grammar／897 vocabulary／27 attempts；v0.7.5 gate 後又完成 8 個同-key corrections：`定員`、`経営方針`、`騒音` canonical romaji，以及 `アンケート`、`セーター`、`プラン`、`プレゼン`、`ボウリング` origin metadata。正式匯入後 `quick_check=ok`、FK violations 0、DB SHA-256=`bb4dbf7943a6d87f2ac73ed5db1c88dc7568556c26e63ce76a86ecdedc46b6d9`；audit 只剩 11 個 review：10 個已確認刻意保留的同-meaning不同非空例句，以及 `vocab:または` 的 `ma ta wa ↔ ma ta ha` fail-closed review。不要用無上下文 converter 自動把 `または` 覆寫成 `ma ta ha`。
+
+Release tooling UX note（2026-09-12 使用者回饋）：raw `pytest -q` 的點狀 progress 會依測試批次長度造成不等寬／終端換行。未來產生 actual-gate script 時，保留完整原始 pytest output 到 log，但終端優先顯示固定寬度或分組式進度摘要；這是 gate tooling UX，不需要修改產品 runtime。
+
+v0.7.5 本輪完整開發／benchmark／coverage／actual gate／data follow-up 記錄：`docs/audits/v0.7.5-performance-development.md`。
 
 ### 2026-09-06 v0.7.4 release baseline
 

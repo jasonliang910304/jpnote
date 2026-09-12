@@ -1,6 +1,6 @@
 # jpnote 使用者操作手冊
 
-本手冊對應 jpnote v0.7.4 開發版。`jpnote --help` 提供精簡指令索引；`jpnote manual` 會輸出這份完整手冊，`jpnote manual --path` 會顯示手冊檔案位置。
+本手冊對應 jpnote v0.7.5 開發版。`jpnote --help` 提供精簡指令索引；`jpnote manual` 會輸出這份完整手冊，`jpnote manual --path` 會顯示手冊檔案位置。
 
 > 原則：任何會修改資料的操作都應先確認輸入與備份；`--check` 是真正 read-only 的預檢，不會建立、升級、修復或改寫實體資料庫。
 
@@ -22,7 +22,7 @@
 
 ```bash
 mkdir -p /tmp/jpnote-install
-tar -xzf jpnote-v0.7.4.tar.gz -C /tmp/jpnote-install --strip-components=1
+tar -xzf jpnote-v0.7.5.tar.gz -C /tmp/jpnote-install --strip-components=1
 /tmp/jpnote-install/install.sh
 rehash
 jpnote --version
@@ -448,13 +448,14 @@ jpnote list vocab --select
 jpnote recent
 jpnote recent --date 2026-07-19
 jpnote recent --since 2026-07-01
+jpnote recent --days 2
 jpnote recent --type vocab
 jpnote recent --source 'TRY! N4'
 jpnote recent --all
 jpnote recent --no-fzf
 ```
 
-`--source` 會用完整來源標籤做精確比對，只顯示具有該來源的項目。
+`--days N` 以本機日曆日期計算且包含今天；例如 `--days 1` 只看今天，`--days 2` 看今天＋昨天。`--days`、`--date`、`--since` 互斥。`--source` 會用完整來源標籤做精確比對，只顯示具有該來源的項目。
 
 ## 4.5 編輯項目
 
@@ -813,6 +814,7 @@ v0.6.5 起：
 - `browse` 會批次載入 entry details 與 attempt links，避免逐筆查詢。
 - duplicate candidate 掃描使用 normalized identity index；一般無衝突資料不再做全項目 O(n²) 比對。
 - `recent` 的 source metadata 也以批次方式載入。
+- v0.7.5 起，Quiz vocabulary pool 會一次建立 normalized safety features，對稱的 pair-safety 只計算一次，並在同一 source 的不同題型間重用 safe candidates／meaning metadata；題庫不足確認直接持久化第一次的 immutable plan，不再重新讀取來源與重建題庫。
 
 這些是內部效能改善，不改變 stable key、SQLite schema 或合法 JSON 欄位。
 
