@@ -6,7 +6,7 @@
 
 本版將原本 1,200 多行的單檔腳本拆成可重用的核心模組與可選介面層。
 
-## v0.7.5.1 Performance architecture / bulk-read（candidate）
+## v0.7.5.1 Performance architecture / bulk-read（released）
 
 v0.7.5.1 延續 v0.7.5 的效能主軸，將反覆 full hydration、attempt identity 掃描、audit／export／preflight N+1 與 prefixed JSON 超線性解析收斂到可重用的 bulk snapshot/index 路徑；不修改 core schema v5、Quiz schema v2 或 public import JSON schema。
 
@@ -15,7 +15,7 @@ v0.7.5.1 延續 v0.7.5 的效能主軸，將反覆 full hydration、attempt iden
 - audit relation/attempt link、romaji audit、Markdown export、`list --select` 改為批次讀取，並加入 query-count regression。
 - `parse_payload()` 先嘗試完整 JSON，再以單次 brace/string-aware outer-object scan 尋找 embedded payload；保留 nested wrapper discovery 與多 payload fail-closed。
 - 真實 1019-item 歷史 snapshot 的 baseline/candidate 比較：full audit SELECT 約 3533→17、romaji audit 3477→1、Markdown export 1475→20、20-item+20-attempt preflight 803→8；對應 public output 完全一致。
-- 2026-09-12 actual Arch candidate gate：`507 passed, 36 subtests passed in 11.79s`，real fzf PASS；0.7.5 → 0.7.5.1 formal install/reinstall、read-only Quiz/bulk smoke、SQLite integrity 與正式 DB fingerprint immutability 全部 PASS。release commit/tag 尚未建立。
+- 2026-09-12 v0.7.5.1 release：actual Arch gate `507 passed, 36 subtests passed in 11.79s`，real fzf PASS；0.7.5 → 0.7.5.1 formal install/reinstall、read-only Quiz/bulk smoke、SQLite integrity 與正式 DB fingerprint immutability 全部 PASS。release commit `d414472e6e40615bcc56cd8f039f5377fc829291` 與 annotated `v0.7.5.1` tag（tag object `90d85662153cb2c1ae052e4949d0d695213a3847`）已建立，release-commit 與 tag-triggered Core regression／Windows import client CI 全綠。
 
 ## v0.7.5 Performance / Quiz early optimization（released）
 

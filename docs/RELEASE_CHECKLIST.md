@@ -43,6 +43,7 @@
 ## Git 與交付
 
 - [ ] working tree 乾淨
+- [ ] 使用者要直接貼上執行的 release／gate／commit 多步驟命令必須 fail fast：artifact 缺失、SHA 不符、`git apply --check`／apply 或其他前置 gate 失敗時，不得繼續 stage／commit／push；腳本預設使用 `set -euo pipefail` 或等價顯式 guard
 - [ ] release commit 已建立
 - [ ] annotated release tag 已建立
 - [ ] push `main` 與 tag 到 GitHub

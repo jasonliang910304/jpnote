@@ -1,9 +1,9 @@
 # jpnote 專案交接紀錄
 
 最後更新：2026-09-12（Asia/Taipei）
-正式 release/tag：`jpnote v0.7.5`；annotated tag object `a780fe24fbd5c91e9ce86ef7e63460fc256079d6` 固定指向 release commit `17bbb36e6c639fc72a05845ab49273c9f98ce50d`
-正式安裝版本：`jpnote 0.7.5`
-目前開發 checkpoint：正式 v0.7.5 已完成，post-release main=`05e1f1b72a5405e64f4d9ee53aa8dbfbb6ce82f5`。使用者 repository 已套用 **v0.7.5.1 bulk-read / snapshot / parser candidate**，且 2026-09-12 actual Arch full regression／real-fzf／formal install+reinstall／formal-DB immutability gate PASS；release commit/push/CI/tag 尚未進行。AI 不修改 GitHub 遠端。
+正式 release/tag：`jpnote v0.7.5.1`；annotated tag object `90d85662153cb2c1ae052e4949d0d695213a3847` 固定指向 release commit `d414472e6e40615bcc56cd8f039f5377fc829291`
+正式安裝版本：`jpnote 0.7.5.1`
+目前開發 checkpoint：正式 v0.7.5.1 已完成；release commit=`d414472e6e40615bcc56cd8f039f5377fc829291`，annotated tag `v0.7.5.1` 固定指向該 commit，release-commit 與 tag-triggered Core regression／Windows import client CI 全綠。release 後只做 handoff-only docs sync 與 idempotent cleanup；下一個 runtime 工作繼續 v0.7.5.x 剩餘 performance/architecture backlog。AI 不修改 GitHub 遠端。
 
 用途：讓新的 ChatGPT 對話或新的開發工作階段，不依賴舊聊天內容也能直接接續工作。
 
@@ -52,7 +52,7 @@ Release tooling UX note（2026-09-12 使用者回饋）：raw `pytest -q` 的點
 
 v0.7.5 本輪完整開發／benchmark／coverage／actual gate／data follow-up 記錄：`docs/audits/v0.7.5-performance-development.md`。
 
-### 2026-09-12 v0.7.5.1 performance architecture candidate（isolated）
+### 2026-09-12 v0.7.5.1 performance architecture release
 
 exact parent/main：`05e1f1b72a5405e64f4d9ee53aa8dbfbb6ce82f5`。此 parent 已由既有 verified bundle＋patch history 重建，commit SHA 與 tree SHA `a5d9e8d1ff3e041647966260758486a086a3dc54` 均精確一致，不需要降低 patch baseline 規則。
 
@@ -65,7 +65,7 @@ exact parent/main：`05e1f1b72a5405e64f4d9ee53aa8dbfbb6ce82f5`。此 parent 已�
 - 真實 1019-item歷史 snapshot baseline/candidate：audit `3533→17 SELECTs`、romaji `3477→1`、export `1475→20`、20-item＋20-attempt preflight `803→8`；public JSON/export/fixed-seed Quiz identity 全 MATCH。
 - final segmented suite：`506 passed, 1 skipped, 36 subtests passed`（507 collected）；唯一 skip 是隔離 container 無 real fzf。app-only coverage：`78%`（9362 statements / 2077 missed）。
 
-source／installer candidate VERSION=0.7.5.1；core schema=5；Quiz schema=2；public import JSON schema unchanged。2026-09-12 actual Arch gate 已 PASS：`507 passed, 36 subtests passed in 11.79s`、real fzf PASS、0.7.5 → 0.7.5.1 formal install＋reinstall PASS、read-only Quiz/bulk smoke 與 SQLite/formal-DB fingerprint immutability PASS。尚未 commit/push/tag，因此仍不得把 0.7.5.1 當正式 release。
+source／installer VERSION=0.7.5.1；core schema=5；Quiz schema=2；public import JSON schema unchanged。2026-09-12 actual Arch gate 已 PASS：`507 passed, 36 subtests passed in 11.79s`、real fzf PASS、0.7.5 → 0.7.5.1 formal install＋reinstall PASS、read-only Quiz/bulk smoke 與 SQLite/formal-DB fingerprint immutability PASS。runtime/tree commit=`a16a8185647402778832814a0c42e923b8b22915`，final release commit=`d414472e6e40615bcc56cd8f039f5377fc829291`；annotated `v0.7.5.1` tag object=`90d85662153cb2c1ae052e4949d0d695213a3847`；release-commit 與 tag-triggered Core regression／Windows import client CI 全綠。
 
 完整記錄：`docs/audits/v0.7.5.1-performance-architecture.md`。
 

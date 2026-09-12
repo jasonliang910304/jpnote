@@ -1,9 +1,9 @@
 # jpnote 開發路線圖
 
 最後更新：2026-09-12（Asia/Taipei）
-正式 release/tag：v0.7.5；annotated tag object `a780fe24fbd5c91e9ce86ef7e63460fc256079d6` 固定指向 release commit `17bbb36e6c639fc72a05845ab49273c9f98ce50d`
-正式安裝版本：0.7.5.1 candidate（2026-09-12 actual Arch gate PASS；release commit/tag 尚未建立）
-目前開發位置：v0.7.5 release 已完成；post-release main=`05e1f1b72a5405e64f4d9ee53aa8dbfbb6ce82f5`。使用者 repository 已套用 **v0.7.5.1 Performance Architecture / Bulk Read candidate**，actual Arch full regression／real-fzf／formal install+reinstall／DB immutability gate 全部 PASS；下一步只剩 release commit/push/CI/tag 與 post-release docs/cleanup。GitHub 遠端變更一律由使用者親手處理，AI 僅做 read-only GitHub 查詢、隔離修改、測試與 patch 準備。
+正式 release/tag：v0.7.5.1；annotated tag object `90d85662153cb2c1ae052e4949d0d695213a3847` 固定指向 release commit `d414472e6e40615bcc56cd8f039f5377fc829291`
+正式安裝版本：0.7.5.1
+目前開發位置：v0.7.5.1 release 已完成；release commit=`d414472e6e40615bcc56cd8f039f5377fc829291`，annotated tag `v0.7.5.1` 與 release-commit／tag-triggered Core regression、Windows import client CI 全綠。release 後只做 handoff-only documentation sync 與 idempotent cleanup，tag 不移動；下一個 runtime checkpoint 繼續 v0.7.5.x 剩餘 fzf performance／dynamic loading／bounded cleanup。GitHub 遠端變更一律由使用者親手處理，AI 僅做 read-only GitHub 查詢、隔離修改、測試與 patch 準備。
 
 ## 0.7.2 高優先主軸 — completed
 
@@ -92,7 +92,7 @@
 
 這只是 Quiz O(N²) 的**第一階段 hot-path reduction**：為了完全保持既有 RNG/shuffle 輸出，仍會對每個 source 建立 ordered candidate sequence 並 shuffle；真正 asymptotic redesign 若會改 fixed-seed sequence，必須另立明確 generator-version／equivalence boundary，不在這個 early patch 偷改。
 
-### v0.7.5.1 — bulk-read / snapshot / parser checkpoint（candidate）
+### v0.7.5.1 — bulk-read / snapshot / parser checkpoint（released）
 
 此 checkpoint 把 v0.7.5 early release 後最明確的 N+1／重複 hydration 收斂成共用 architecture，優先保持 public output、import conflict semantics 與 fixed-seed Quiz identity 完全等價：
 
@@ -104,8 +104,9 @@
 - `parse_payload()`：whole-document decode＋單次 brace/string-aware outer-object scan；large nested regression `raw_decode` 約 `6004 → 3`，nested payload discovery 與 multiple-payload fail-closed 保留。
 - `list --select` 改用 bulk full-entry read，不再逐 entry `get_entry()`。
 - 新增 query-count/scaling tests；version-bump 前 assistant 完整分段 gate `502 passed, 1 skipped, 36 subtests passed`，唯一 skip 為 container 無 real fzf；app-only coverage `78%`（9342 statements / 2074 missed）。
-- source／installer candidate version 0.7.5.1；core schema v5／Quiz schema v2／public import JSON schema不變。
+- source／installer version 0.7.5.1；core schema v5／Quiz schema v2／public import JSON schema不變。
 - actual Arch gate（2026-09-12）：完整 repository `507 passed, 36 subtests passed in 11.79s`，real fzf integration PASS；0.7.5 → 0.7.5.1 formal install＋reinstall、read-only Quiz/bulk smoke、installed CLI/data read-only gate、SQLite quick/FK 與 formal DB fingerprint immutability 全部 PASS。
+- release completion：runtime/tree commit `a16a8185647402778832814a0c42e923b8b22915` 後補 actual-gate docs，final release commit=`d414472e6e40615bcc56cd8f039f5377fc829291`；annotated `v0.7.5.1` tag object=`90d85662153cb2c1ae052e4949d0d695213a3847`，release-commit 與 tag-triggered Core regression／Windows import client CI 全綠。
 
 完整開發記錄：`docs/audits/v0.7.5.1-performance-architecture.md`。
 
