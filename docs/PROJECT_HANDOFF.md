@@ -1,9 +1,9 @@
 # jpnote 專案交接紀錄
 
 最後更新：2026-09-12（Asia/Taipei）
-正式 release/tag：`jpnote v0.7.4`；annotated tag 固定指向 release commit `d6c847180e466439560769d1567048f7b382a4fb`
-正式安裝版本：`jpnote 0.7.5` candidate（2026-09-12 actual Arch gate PASS；尚未 release/tag）
-目前開發 checkpoint：正式 release/tag 仍是 v0.7.4；使用者本機 repository 仍以 `115ce7df2618e8e8b53be9d1f977a55700c9a65c` 為 HEAD，但已套用未 commit 的 v0.7.5 early-performance patch，且正式安裝版本已是 0.7.5 candidate。2026-09-12 actual Arch full regression／real-fzf／install／formal-DB immutability gate 全 PASS；post-gate data correction 也已完成。下一步只剩同步最終 docs、由使用者 review/commit/push，等待 CI 成功後再建立 v0.7.5 annotated tag。`v0.7.4` tag 不移動。AI 不修改 GitHub 遠端。
+正式 release/tag：`jpnote v0.7.5`；annotated tag object `a780fe24fbd5c91e9ce86ef7e63460fc256079d6` 固定指向 release commit `17bbb36e6c639fc72a05845ab49273c9f98ce50d`
+正式安裝版本：`jpnote 0.7.5`
+目前開發 checkpoint：v0.7.5 early-performance release 已完成。2026-09-12 actual Arch full regression／real-fzf／install／formal-DB immutability gate 全 PASS；post-gate data correction 已完成；release-commit push CI 與 tag-triggered Core regression／Windows import client CI 也全綠。下一個 runtime 工作直接進 v0.7.5.x Performance & Architecture Cleanup。AI 不修改 GitHub 遠端。
 
 用途：讓新的 ChatGPT 對話或新的開發工作階段，不依賴舊聊天內容也能直接接續工作。
 
@@ -11,13 +11,15 @@
 
 ## 1. 目前可信基準
 
-### 2026-09-12 v0.7.5 early-performance candidate（actual Arch PASS；尚未 release）
+### 2026-09-12 v0.7.5 early-performance release（completed）
 
 ```text
-exact parent/main=115ce7df2618e8e8b53be9d1f977a55700c9a65c
+exact development parent=115ce7df2618e8e8b53be9d1f977a55700c9a65c
+release commit=17bbb36e6c639fc72a05845ab49273c9f98ce50d
+annotated tag object=a780fe24fbd5c91e9ce86ef7e63460fc256079d6
 user bundle SHA-256=ee80c4279aa7aac4c9cd413e14e25745c608a71bd9f72ab4fe9f643b4bfe7300
-source VERSION=0.7.5 candidate
-formal installed version=0.7.5 candidate; formal release/tag=0.7.4
+source VERSION=0.7.5
+formal installed version=0.7.5; formal release/tag=v0.7.5
 core schema=5
 Quiz schema=2
 public import JSON schema=unchanged
@@ -295,7 +297,7 @@ jpnote browse
 
 ## 6. 每個 checkpoint 與 release 的紀錄規則
 
-每次開發的固定 hygiene：成功 gate／release 後，清理已失去用途的 patch、validation script、SHA sidecar、obsolete snapshot、stale temp dir 與已被成功結果取代的失敗 log；保留當前成功 validation log、正式 DB safety backup、active rollback artifact／release bundle。若 gate 失敗，先保留診斷所需檔案，修正後成功才清。
+每次開發的固定 hygiene：成功 gate／release 後，清理已失去用途的 patch、validation script、SHA sidecar、obsolete snapshot、stale temp dir 與已被成功結果取代的失敗 log；保留當前成功 validation log、正式 DB safety backup、active rollback artifact／release bundle。若 gate 失敗，先保留診斷所需檔案，修正後成功才清。每個正式版本結束時另提供 idempotent cleanup script；artifact 已被使用者手動刪除時只顯示 SKIP，不視為失敗。
 
 每個會改變「目前完成範圍、下一步、schema、測試基線或重要規格」的開發 checkpoint，至少同步更新：
 

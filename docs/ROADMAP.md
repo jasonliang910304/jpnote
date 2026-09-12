@@ -1,9 +1,9 @@
 # jpnote 開發路線圖
 
 最後更新：2026-09-12（Asia/Taipei）
-正式 release/tag：v0.7.4；annotated tag 固定指向 release commit `d6c847180e466439560769d1567048f7b382a4fb`
-正式安裝版本：0.7.5 candidate（2026-09-12 actual Arch gate PASS；release/tag 尚未建立）
-目前開發位置：v0.7.4 release 完成且 tag 不移動；post-release HEAD=`115ce7df...`。使用者 working tree 已套用 v0.7.5 early-performance candidate，且 2026-09-12 actual Arch full regression／real-fzf／install／formal-DB immutability gate PASS；post-gate 8-item data correction 也已完成。尚未 commit/push/tag；下一步只剩同步最終 docs，然後 user-controlled release commit/push/CI/tag。GitHub 遠端變更一律由使用者親手處理；AI 僅做 read-only GitHub 查詢、隔離修改、測試與 patch 準備。
+正式 release/tag：v0.7.5；annotated tag object `a780fe24fbd5c91e9ce86ef7e63460fc256079d6` 固定指向 release commit `17bbb36e6c639fc72a05845ab49273c9f98ce50d`
+正式安裝版本：0.7.5
+目前開發位置：v0.7.5 early-performance release 已完成；release-commit push CI 與 tag-triggered Core regression／Windows import client CI 全綠。post-gate 8-item data correction 也已完成。下一個 runtime 工作進入 v0.7.5.x Performance & Architecture Cleanup；GitHub 遠端變更一律由使用者親手處理，AI 僅做 read-only GitHub 查詢、隔離修改、測試與 patch 準備。
 
 ## 0.7.2 高優先主軸 — completed
 
@@ -78,7 +78,7 @@
 
 第一原則：**功能正常／資料安全／行為等價 > 架構漂亮 > 效能提升 > dead-code 瘦身**。Git rollback 只是最後保險，不能作為大改後再看有沒有壞的替代品。
 
-### Early-performance release candidate — implemented in isolated checkout
+### Early-performance release — completed 2026-09-12
 
 因使用者在 869 vocabulary 時已明顯感受到 Quiz startup delay，先把高收益且可保持 fixed-seed output 等價的工作提前，不等待整個架構清理：
 
@@ -86,7 +86,7 @@
 - shortage confirmation：直接 persist 第一次 immutable plan，不再重讀 core sources／重建題庫。
 - `recent --days N`：包含今天的最近 N 個本機日曆日，與 `--date`／`--since` 互斥。
 - romaji 長音 mora preservation＋canonical-direction equivalence；不對無上下文助詞 `は` 猜讀音。
-- source/installer version 0.7.5 candidate；core schema v5／Quiz schema v2／public import schema 不變。
+- source/installer version 0.7.5；core schema v5／Quiz schema v2／public import schema 不變。
 - artifact gate：final patch 在第二個由使用者 bundle 建立的 fresh checkout `git apply --check`、actual apply、`git diff --check`、19-path byte equality PASS；clean-applied targeted regression `133 passed`、compileall 與 isolated install smoke PASS。assistant 分段完整 suite 為 `494 passed, 1 skipped, 36 subtests`，唯一 skip 是容器缺 real fzf。
 - actual Arch gate（2026-09-12）：real fzf `0.74.3`；完整 `495 passed, 36 subtests passed`。正式機 897 vocab／27 attempts read-only Quiz planning total 0.915s；0.7.4 → 0.7.5 install PASS；formal DB 1050/153/897/27、quick/FK PASS，SHA-256 `c0463ac4533cb691c92b1ca3ed0229ea3dc8551a537528a9621c275f136fba70`／size 1536000／mtime／mode gate 前後完全不變。gate 後正式匯入 8 個同-key data corrections（3 個 romaji＋5 個 origin metadata），再次 quick/FK PASS；DB SHA-256 更新為 `bb4dbf7943a6d87f2ac73ed5db1c88dc7568556c26e63ce76a86ecdedc46b6d9`，audit 剩 10 個刻意多例句 review＋`または` 1 個 fail-closed review。
 
@@ -102,6 +102,7 @@
 - fzf：處理 per-keypress subprocess/full normalization 的效能面；matching/ranking semantics 本身在 v0.7.6 統一。
 - 對被新架構取代的舊 implementation 做 bounded cleanup：confirmed dead code 直接刪；superseded duplicate 先遷移 caller 再刪；migration/public API/installer fallback 等 compatibility-sensitive code 不因「看似沒用」就移除。
 - release tooling UX：future actual-gate script 將 raw pytest 輸出完整寫 log，但 terminal 進度改用固定寬度／分組摘要，避免點狀 progress 因終端寬度換行。
+- release cleanup：每個版本正式完成後提供 idempotent cleanup script；已不存在的 artifact 只顯示 SKIP，不因使用者先手動清除而失敗。正式 DB、undo backups、仍在 rollback retention 內的 installed revision 不自動刪除。
 
 剩餘工作可依風險拆成 0.7.5.x checkpoints；每個 checkpoint 都必須可獨立正常使用，不能依賴下一段才能恢復功能。
 
@@ -112,7 +113,7 @@
 - Quiz True/False 顯示 `○／×`；`reorder_4` feedback 顯示完整句並高亮 movable portion，保留無色 fallback。
 - 保留並強化現有 kana-prompt homophone guard；基本同音詞安全已存在，不再當作「從零實作」項目。
 - Quiz history export/delete TUI 入口與 history polish。
-- grammar 詳細頁 numbered paragraph hanging indent／長段落 wrapping。
+- grammar 詳細頁 numbered paragraph hanging indent／長段落 wrapping；同一共用 renderer 也要覆蓋例句等有編號或縮排的長內容，避免編號孤立一行、續行回到最左側。
 - fzf 未分類／mistake level 空值等一般 UX，以及 fuzzy duplicate candidate／確認流程。
 
 ## v0.7.7 — Crash / Filesystem / CI hardening

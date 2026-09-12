@@ -14,7 +14,7 @@ v0.7.5 先把資料量成長後最明顯的 Quiz 啟動瓶頸提前處理，同�
 - 題庫不足確認直接使用第一次已建立的 immutable plan，不再重新讀取 core sources／重新生成整份題庫。
 - `jpnote recent --days N` 以本機日曆日查看包含今天在內最近 N 天的新增／更新資料；與 `--date`／`--since` 互斥。
 - 修正 spaced Hepburn 長音壓縮會吞掉後續獨立 mora 的問題，並讓 romaji equivalence 以 reading-derived canonical 方向為權威，避免把少一個 mora 的舊值誤判成等價。
-- 2026-09-12 actual Arch gate：`495 passed, 36 subtests passed`（含 real fzf）；897 vocabulary／27 attempt sources 的 read-only Quiz planning total 約 `0.915s`。0.7.4 → 0.7.5 正式安裝 PASS，正式 DB fingerprint 安裝前後完全不變；目前仍是 unreleased candidate，GitHub release/tag 尚未建立。
+- 2026-09-12 v0.7.5 release：actual Arch gate `495 passed, 36 subtests passed`（含 real fzf）；897 vocabulary／27 attempt sources 的 read-only Quiz planning total 約 `0.915s`。0.7.4 → 0.7.5 正式安裝 PASS，正式 DB fingerprint 安裝前後完全不變；release commit `17bbb36e6c639fc72a05845ab49273c9f98ce50d` 與 annotated `v0.7.5` tag 已建立，release-commit 與 tag-triggered Core regression／Windows import client CI 全綠。
 
 ## v0.7.4 Deep-audit correctness / safety
 
