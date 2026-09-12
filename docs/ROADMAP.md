@@ -2,8 +2,8 @@
 
 最後更新：2026-09-12（Asia/Taipei）
 正式 release/tag：v0.7.5；annotated tag object `a780fe24fbd5c91e9ce86ef7e63460fc256079d6` 固定指向 release commit `17bbb36e6c639fc72a05845ab49273c9f98ce50d`
-正式安裝版本：0.7.5
-目前開發位置：v0.7.5 release 已完成；post-release main=`05e1f1b72a5405e64f4d9ee53aa8dbfbb6ce82f5`。目前在 exact `05e1f1b...` 隔離 checkout 開發 **v0.7.5.1 Performance Architecture / Bulk Read candidate**；尚未套到使用者 repository／正式安裝。GitHub 遠端變更一律由使用者親手處理，AI 僅做 read-only GitHub 查詢、隔離修改、測試與 patch 準備。
+正式安裝版本：0.7.5.1 candidate（2026-09-12 actual Arch gate PASS；release commit/tag 尚未建立）
+目前開發位置：v0.7.5 release 已完成；post-release main=`05e1f1b72a5405e64f4d9ee53aa8dbfbb6ce82f5`。使用者 repository 已套用 **v0.7.5.1 Performance Architecture / Bulk Read candidate**，actual Arch full regression／real-fzf／formal install+reinstall／DB immutability gate 全部 PASS；下一步只剩 release commit/push/CI/tag 與 post-release docs/cleanup。GitHub 遠端變更一律由使用者親手處理，AI 僅做 read-only GitHub 查詢、隔離修改、測試與 patch 準備。
 
 ## 0.7.2 高優先主軸 — completed
 
@@ -105,6 +105,7 @@
 - `list --select` 改用 bulk full-entry read，不再逐 entry `get_entry()`。
 - 新增 query-count/scaling tests；version-bump 前 assistant 完整分段 gate `502 passed, 1 skipped, 36 subtests passed`，唯一 skip 為 container 無 real fzf；app-only coverage `78%`（9342 statements / 2074 missed）。
 - source／installer candidate version 0.7.5.1；core schema v5／Quiz schema v2／public import JSON schema不變。
+- actual Arch gate（2026-09-12）：完整 repository `507 passed, 36 subtests passed in 11.79s`，real fzf integration PASS；0.7.5 → 0.7.5.1 formal install＋reinstall、read-only Quiz/bulk smoke、installed CLI/data read-only gate、SQLite quick/FK 與 formal DB fingerprint immutability 全部 PASS。
 
 完整開發記錄：`docs/audits/v0.7.5.1-performance-architecture.md`。
 

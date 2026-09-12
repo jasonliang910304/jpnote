@@ -7,6 +7,7 @@
 - `parse_payload()` 移除對每個 `{` 反覆 `raw_decode(candidate[position:])` 的超線性掃描；改為 whole-document decode＋一次 brace/string-aware outer-object scan，再遞迴尋找 nested payload。large nested regression 中 `raw_decode` 約 `6004 → 3`，多個不同 payload 仍 fail closed。
 - 新增 query-count/scaling regression，防止 romaji audit、full audit attempt/relation reads、Markdown export、bulk preflight 與 Quiz shared snapshot 回退成 N+1。
 - source／installer version 更新為 0.7.5.1；core schema 維持 v5、Quiz schema 維持 v2、public import JSON schema 不變。assistant final segmented gate `506 passed, 1 skipped, 36 subtests passed`（507 collected），唯一 skip 是隔離容器無 real fzf；app-only coverage `78%`（9362 statements / 2077 missed）。
+- 2026-09-12 actual Arch gate PASS：完整 repository `507 passed, 36 subtests passed in 11.79s`，real fzf integration PASS；0.7.5 → 0.7.5.1 formal install＋reinstall PASS；read-only Quiz/bulk smoke、installed CLI/data read-only gate、SQLite integrity 全部 PASS，formal DB SHA-256／size／mtime／mode fingerprint 前後完全不變。actual-gate script 使用固定寬度 10-stage terminal progress，完整 pytest raw output 保留於 log `~/Downloads/jpnote-v0751-arch-gate-20260912T230720.log`。
 
 ## 0.7.5 — 2026-09-12
 
