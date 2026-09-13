@@ -6,7 +6,7 @@
 
 本版將原本 1,200 多行的單檔腳本拆成可重用的核心模組與可選介面層。
 
-## v0.7.5.3 Quiz dynamic loading / bounded cleanup（candidate；actual Arch gate PASS）
+## v0.7.5.3 Quiz dynamic loading / bounded cleanup（released）
 
 v0.7.5.3 完成 v0.7.5.x 剩餘的 Quiz loading UX，不改題目選擇、固定 seed 題目語意或資料 schema：
 
@@ -17,7 +17,7 @@ v0.7.5.3 完成 v0.7.5.x 剩餘的 Quiz loading UX，不改題目選擇、固定
 - 第一版不提供 loading 中途取消，避免切斷 SQLite persistence boundary；service progress observer 預設關閉且 fail-soft。
 - bounded cleanup 只移除 controller-private 永遠為 false 的 `allow_shortage` 參數；service compatibility surface 保留。
 - core schema v5、Quiz schema v2、public import JSON schema 不變；沒有 DB 登入、權限或 migration 規則變更。
-- 2026-09-13 actual Arch 10-stage resume gate 全 PASS：full repository pytest、real fzf、0.7.5.2 → 0.7.5.3 install、0.7.5.3 reinstall／installed smoke 與正式 DB fingerprint immutability 全部通過。release commit/tag 尚未建立。
+- 2026-09-13 v0.7.5.3 release：actual Arch 10-stage resume gate 全 PASS，包含 full repository pytest、real fzf、0.7.5.2 → 0.7.5.3 install、0.7.5.3 reinstall／installed smoke 與正式 DB fingerprint immutability。release commit `8e4e17d6c48c0f3e31e9ad00bc42f618b542ecae` 與 annotated `v0.7.5.3` tag（tag object `982fe761f1148196838cfc1b4a669d36f8baf438`）已建立；release-commit Core regression PASS，tag-triggered Core regression／Windows import client CI 全綠。
 
 ## v0.7.5.2 Search / fzf hot-path performance（released）
 

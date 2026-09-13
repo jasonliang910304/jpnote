@@ -18,13 +18,13 @@
 
 ## 目前基準
 
-- 正式 release/tag：`jpnote v0.7.5.2`；annotated tag 固定指向 release commit `db8ad3e2a1346cd07a07ac73c089420509a2a428`（tag object `7413e4c97e7fd37ee10114f694579d811dec69f6`）
-- 正式安裝版本：`jpnote 0.7.5.3` candidate（actual Arch install/reinstall gate PASS；formal release/tag 尚為 v0.7.5.2）
+- 正式 release/tag：`jpnote v0.7.5.3`；annotated tag 固定指向 release commit `8e4e17d6c48c0f3e31e9ad00bc42f618b542ecae`（tag object `982fe761f1148196838cfc1b4a669d36f8baf438`）
+- 正式安裝版本：`jpnote 0.7.5.3`
 - v0.7.4 parent／v0.7.3 final main：`851e77add870e2a19fcbe674860828ecccf81852`
 - v0.7.5 release commit `17bbb36e6c639fc72a05845ab49273c9f98ce50d` 已 push；release-commit 與 tag-triggered Core regression／Windows import client CI 全綠。下一個 runtime 工作基線以 v0.7.5 release 後 main 為準
 - v0.7.5.1 release commit=`d414472e6e40615bcc56cd8f039f5377fc829291`；annotated tag `v0.7.5.1`（tag object `90d85662153cb2c1ae052e4949d0d695213a3847`）與 release-commit／tag-triggered Core regression、Windows import client CI 全綠；本次 post-release main 只再加 handoff-only docs sync，tag 不移動
 - v0.7.5.2 release（2026-09-13）：exact parent `c6e585a62fc46846101c56c6842f84ca810cd351`；search/fzf hot-path optimization 保持 matcher/ranking semantics 等價。actual Arch `513 passed, 36 subtests passed in 11.56s`＋real fzf PASS；formal install/reinstall、read-only search/Quiz smoke、SQLite/formal-DB fingerprint immutability 全 PASS；release commit `db8ad3e2a1346cd07a07ac73c089420509a2a428`、annotated tag `v0.7.5.2`（tag object `7413e4c97e7fd37ee10114f694579d811dec69f6`）已完成。release-commit Core regression PASS（Windows workflow 因 path filter 未觸發），tag-triggered Core regression／Windows import client PASS。post-release main 只再加 handoff-only docs sync，tag 不移動。
-- v0.7.5.3 release candidate（2026-09-13）：exact parent `84697394c6a64629f0a0e97ebaa970f1e1e8e44f`；dynamic Quiz loading/progress、shortage-plan reuse preservation、worker exception/interruption recovery 與 bounded controller dead-code cleanup 已完成。第一次 actual gate 的 full suite 只抓到 stale version assertion（519 pass / 1 fail / 36 subtests）；修正後 10-stage resume gate 全 PASS，real fzf、0.7.5.2 → 0.7.5.3 install/reinstall 與 formal DB fingerprint immutability 全 PASS。release-finalization review 補正 Core CI 0.7.5.2 hardcode；release commit/tag/CI 尚未完成。core schema v5、Quiz schema v2、public import schema unchanged，沒有 DB login/auth/permission/migration 變更。
+- v0.7.5.3 release（2026-09-13）：exact parent `84697394c6a64629f0a0e97ebaa970f1e1e8e44f`；dynamic Quiz loading/progress、shortage-plan reuse preservation、worker exception/interruption recovery 與 bounded controller dead-code cleanup 已完成。第一次 actual gate 的 full suite 只抓到 stale version assertion（519 pass / 1 fail / 36 subtests）；修正後 10-stage resume gate 全 PASS，real fzf、0.7.5.2 → 0.7.5.3 install/reinstall 與 formal DB fingerprint immutability 全 PASS。release-finalization review 補正 Core CI 0.7.5.2 hardcode；release commit `8e4e17d6c48c0f3e31e9ad00bc42f618b542ecae`、annotated tag `v0.7.5.3`（tag object `982fe761f1148196838cfc1b4a669d36f8baf438`）與 release-commit/tag-triggered Core regression、Windows import client CI 全部完成。core schema v5、Quiz schema v2、public import schema unchanged，沒有 DB login/auth/permission/migration 變更。
 - GitHub write policy：AI 不做 branch/commit/push/tag/PR/workflow 等遠端變更；GitHub 僅 read-only。AI 在隔離環境準備/驗證 patch，所有 GitHub 寫入由使用者親手完成
 - core SQLite schema：v5
 - Quiz SQLite：獨立 `quiz.db`，schema v2
@@ -53,7 +53,7 @@ git status
 git fetch --tags origin
 git rev-parse --short HEAD
 git rev-parse --short origin/main
-git rev-parse --short 'v0.7.5.2^{}'
+git rev-parse --short 'v0.7.5.3^{}'
 git diff --check
 jpnote --version
 ```
@@ -108,12 +108,12 @@ jpnote --version
 
 ## 下一個正確工作項目
 
-Deep Adversarial Audit、v0.7.4 correctness/safety、v0.7.5 early-performance、v0.7.5.1 bulk-read/snapshot/parser 與 v0.7.5.2 search/fzf release 都已完成；v0.7.5.3 dynamic Quiz loading/bounded cleanup actual Arch gate 已 PASS。不要修改或移動既有 release tag。現在只完成 v0.7.5.3 release-finalization、release commit/push、annotated tag、release CI 與 post-release cleanup；之後直接進 v0.7.6 correctness/UI backlog，不重做已完成的廣域 audit。
+Deep Adversarial Audit、v0.7.4 correctness/safety、v0.7.5 early-performance、v0.7.5.1 bulk-read/snapshot/parser、v0.7.5.2 search/fzf 與 v0.7.5.3 dynamic Quiz loading/bounded cleanup release 都已完成。不要修改或移動既有 release tag。目前只做 v0.7.5.3 handoff-only docs sync／idempotent artifact cleanup；下一個 runtime checkpoint 直接進 v0.7.6 correctness/UI backlog，不重做已完成的廣域 audit。
 
 後續固定排程：
 
 1. v0.7.5 release／tag／CI／formal dataset correction 已全部完成；除非後續 runtime 變更造成 regression，不重跑已通過的 release gate。
-2. v0.7.5.2 已 release：fzf 預先 search index、reload query-only normalization、`-S` helper bootstrap、core search variant reuse；matching/ranking semantics 保持 v0.7.5.1 等價。v0.7.5.3 dynamic loading/bounded cleanup actual Arch gate 已 PASS，release-finalization／commit／tag／CI 尚待完成；完成後 v0.7.5.x runtime scope 收斂，下一個 checkpoint 進 v0.7.6。
+2. v0.7.5.2 與 v0.7.5.3 已 release：v0.7.5.2 完成 search/fzf hot-path optimization；v0.7.5.3 完成 dynamic Quiz loading/progress 與 bounded cleanup。v0.7.5.3 release commit `8e4e17d...`、annotated tag `v0.7.5.3` 與 release/tag Core／Windows import client CI 全部完成；v0.7.5.x runtime scope 已收斂，下一個 checkpoint 進 v0.7.6。
 3. v0.7.6 UI backlog 保留 grammar detail numbered/hanging-indent wrapping；此次使用者截圖確認「例句」等有編號或縮排的長內容也必須走同一套 wrapping renderer。
 4. v0.7.6 Search + Quiz/UI correctness：`imasu` overmatch、core/fzf ranking、`○／×`、純假名讀音題 eligibility guard、reorder 完整句、history/hanging-indent 等。basic homophone guard 已存在，不當作未實作 foundation。
 5. v0.7.7 crash/filesystem/CI hardening。

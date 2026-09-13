@@ -1,9 +1,9 @@
 # jpnote 開發路線圖
 
 最後更新：2026-09-13（Asia/Taipei）
-正式 release/tag：v0.7.5.2；annotated tag object `7413e4c97e7fd37ee10114f694579d811dec69f6` 固定指向 release commit `db8ad3e2a1346cd07a07ac73c089420509a2a428`
-正式安裝版本：0.7.5.3 candidate（actual Arch install/reinstall gate PASS；formal release/tag 尚為 v0.7.5.2）
-目前開發位置：v0.7.5.3 dynamic Quiz loading/progress＋bounded dead-code cleanup candidate，exact parent=`84697394c6a64629f0a0e97ebaa970f1e1e8e44f`。actual Arch runtime/install/formal-DB gate 已 PASS，正式 DB fingerprint 完全不變；formal release/tag 尚為 v0.7.5.2。現在只剩 release-finalization contract/docs、release commit/tag/CI 與 post-release cleanup；本 candidate 不改 core schema v5、Quiz schema v2 或 public import schema。GitHub 遠端變更一律由使用者親手處理，AI 僅做 read-only GitHub 查詢、隔離修改、測試與 patch 準備。
+正式 release/tag：v0.7.5.3；annotated tag object `982fe761f1148196838cfc1b4a669d36f8baf438` 固定指向 release commit `8e4e17d6c48c0f3e31e9ad00bc42f618b542ecae`
+正式安裝版本：0.7.5.3
+目前開發位置：v0.7.5.3 dynamic Quiz loading/progress＋bounded dead-code cleanup 已正式 release。exact parent=`84697394c6a64629f0a0e97ebaa970f1e1e8e44f`；release commit=`8e4e17d6c48c0f3e31e9ad00bc42f618b542ecae`；annotated tag object=`982fe761f1148196838cfc1b4a669d36f8baf438`。actual Arch gate、release-commit Core、tag-triggered Core 與 Windows import client CI 全 PASS，正式 DB fingerprint 完全不變。v0.7.5.x runtime scope 已收斂；目前只做 handoff-only docs sync／artifact cleanup，下一個 runtime checkpoint 進 v0.7.6。core schema v5、Quiz schema v2、public import schema不變。GitHub 遠端變更一律由使用者親手處理，AI 僅做 read-only GitHub 查詢、隔離修改、測試與 artifact 準備。
 
 ## 0.7.2 高優先主軸 — completed
 
@@ -122,18 +122,18 @@ exact parent：post-v0.7.5.1 handoff main `c6e585a62fc46846101c56c6842f84ca810cd
 - release completion：release commit=`db8ad3e2a1346cd07a07ac73c089420509a2a428`；annotated `v0.7.5.2` tag object=`7413e4c97e7fd37ee10114f694579d811dec69f6`。release-commit Core regression PASS（Windows import client 因 main-push path filter 未觸發）；tag-triggered Core regression／Windows import client CI 全綠。
 - 新增非 timing-based regression：indexed output 等價、query normalization O(1)、no-site helper isolation、variant reuse。core schema v5／Quiz schema v2／public import schema 不變。 final assistant segmented gate `512 passed, 1 skipped, 36 subtests passed`（513 collected）；coverage `78%`（9398/2070）；isolated install＋reinstall PASS。
 
-### v0.7.5.3 — Quiz dynamic loading / bounded cleanup（release candidate；actual Arch gate PASS）
+### v0.7.5.3 — Quiz dynamic loading / bounded cleanup（released）
 
 - curses/window API 保持 main-thread only；slow start action 使用單一 non-daemon worker，main loop 以 queue 接收真實 coarse stage 並持續動畫，不顯示假百分比。
 - service progress observer 以 `ContextVar` 隔離、預設關閉且 fail-soft；headless caller、question selection、shortage-plan reuse 與 persistence semantics 不變。
 - worker exception 回到 main thread；session 已 persistence 但第一題載入失敗時沿既有 interruption recovery 標為 `interrupted`。第一版不提供 loading cancellation。
 - bounded cleanup 只移除 controller-private 永遠為 false 的 `allow_shortage`；public/service compatibility parameter 保留。
 - actual Arch 第一次 full suite 抓到唯一 stale release-version assertion（519 passed / 1 failed / 36 subtests）；修正後 10-stage resume gate 全 PASS，包含 real fzf、formal install/reinstall、installed smoke 與正式 DB fingerprint immutability。
-- release-finalization review 補正 `.github/workflows/core.yml` 的 0.7.5.2 installer-smoke hardcode，並把 workflow/current `VERSION` 一致性加入 contract regression。
+- release-finalization review 補正 `.github/workflows/core.yml` 的 0.7.5.2 installer-smoke hardcode，並把 workflow/current `VERSION` 一致性加入 contract regression。release commit=`8e4e17d6c48c0f3e31e9ad00bc42f618b542ecae`；annotated `v0.7.5.3` tag object=`982fe761f1148196838cfc1b4a669d36f8baf438`；release-commit Core regression 與 tag-triggered Core／Windows import client CI 全綠。
 - core schema v5／Quiz schema v2／public import schema 不變；沒有 DB login/auth/permission/migration 變更。
 - release tooling UX：raw pytest 完整寫 log，terminal 使用固定寬度 stage summary；正式 release 後仍提供 idempotent artifact cleanup，不刪 formal DB、undo backups 或 rollback-retained installed revisions。
 
-v0.7.5.x runtime scope 在本 release 完成後收斂；下一個 runtime checkpoint 直接進 v0.7.6 correctness/UI backlog。
+v0.7.5.x runtime scope 已收斂；下一個 runtime checkpoint 直接進 v0.7.6 correctness/UI backlog。
 
 ## v0.7.6 — Search + Quiz/UI correctness
 
