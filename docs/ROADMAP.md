@@ -1,9 +1,9 @@
 # jpnote 開發路線圖
 
 最後更新：2026-09-13（Asia/Taipei）
-正式 release/tag：v0.7.5.1；annotated tag object `90d85662153cb2c1ae052e4949d0d695213a3847` 固定指向 release commit `d414472e6e40615bcc56cd8f039f5377fc829291`
-正式安裝版本：0.7.5.2 candidate；2026-09-13 actual Arch install/reinstall gate PASS，release commit/tag 尚未建立
-目前開發位置：v0.7.5.1 release 與 post-release handoff 已完成；post-release main=`c6e585a62fc46846101c56c6842f84ca810cd351`。v0.7.5.2 search/fzf hot-path candidate 已由使用者套用並完成 actual Arch gate；matching/ranking semantics 不變。下一步完成 release commit/push/CI/tag/post-release cleanup，再進 dynamic loading／bounded cleanup。GitHub 遠端變更一律由使用者親手處理，AI 僅做 read-only GitHub 查詢、隔離修改、測試與 patch 準備。
+正式 release/tag：v0.7.5.2；annotated tag object `7413e4c97e7fd37ee10114f694579d811dec69f6` 固定指向 release commit `db8ad3e2a1346cd07a07ac73c089420509a2a428`
+正式安裝版本：0.7.5.2
+目前開發位置：v0.7.5.2 search/fzf hot-path release 已完成；release commit=`db8ad3e2a1346cd07a07ac73c089420509a2a428`、annotated tag object=`7413e4c97e7fd37ee10114f694579d811dec69f6`，tag-triggered Core regression／Windows import client CI 全綠。現在只做 handoff-only docs sync／cleanup；下一個 runtime checkpoint 進 dynamic Quiz loading/progress 與 bounded dead-code cleanup。GitHub 遠端變更一律由使用者親手處理，AI 僅做 read-only GitHub 查詢、隔離修改、測試與 patch 準備。
 
 ## 0.7.2 高優先主軸 — completed
 
@@ -110,7 +110,7 @@
 
 完整開發記錄：`docs/audits/v0.7.5.1-performance-architecture.md`。
 
-### v0.7.5.2 — search / fzf hot-path checkpoint（candidate；actual Arch gate PASS）
+### v0.7.5.2 — search / fzf hot-path checkpoint（released）
 
 exact parent：post-v0.7.5.1 handoff main `c6e585a62fc46846101c56c6842f84ca810cd351`。
 
@@ -118,7 +118,8 @@ exact parent：post-v0.7.5.1 handoff main `c6e585a62fc46846101c56c6842f84ca810cd
 - helper bootstrap 使用 `python -I -S`；保留 installed-path bootstrap 與 `PYTHONPATH` isolation，同時跳過無關 site initialization。
 - core `entry_match_score()` reuse romaji／grammar variant sets；不改 ranking score 或 matcher semantics。
 - 歷史 1019-item snapshot／1046 browse rows 的 baseline/candidate representative-query output 全 MATCH；fzf reload median 約 `58–101ms → 26–30ms`（兩側均使用 `-S` neutral baseline），一次性 in-process index 約 `48ms`。core search median 代表值約 `105–161ms → 96–143ms`。
-- actual Arch gate（2026-09-13）：完整 repository `513 passed, 36 subtests passed in 11.56s`、real fzf integration PASS；read-only search／Quiz smoke、0.7.5.1 → 0.7.5.2 formal install＋reinstall、installed CLI/data read-only gate、SQLite integrity 與 formal DB fingerprint immutability 全部 PASS。release commit/tag 尚未建立。
+- actual Arch gate（2026-09-13）：完整 repository `513 passed, 36 subtests passed in 11.56s`、real fzf integration PASS；read-only search／Quiz smoke、0.7.5.1 → 0.7.5.2 formal install＋reinstall、installed CLI/data read-only gate、SQLite integrity 與 formal DB fingerprint immutability 全部 PASS。
+- release completion：release commit=`db8ad3e2a1346cd07a07ac73c089420509a2a428`；annotated `v0.7.5.2` tag object=`7413e4c97e7fd37ee10114f694579d811dec69f6`。release-commit Core regression PASS（Windows import client 因 main-push path filter 未觸發）；tag-triggered Core regression／Windows import client CI 全綠。
 - 新增非 timing-based regression：indexed output 等價、query normalization O(1)、no-site helper isolation、variant reuse。core schema v5／Quiz schema v2／public import schema 不變。 final assistant segmented gate `512 passed, 1 skipped, 36 subtests passed`（513 collected）；coverage `78%`（9398/2070）；isolated install＋reinstall PASS。
 
 ### v0.7.5 remaining work after 0.7.5.2

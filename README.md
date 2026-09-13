@@ -6,7 +6,7 @@
 
 本版將原本 1,200 多行的單檔腳本拆成可重用的核心模組與可選介面層。
 
-## v0.7.5.2 Search / fzf hot-path performance（candidate；actual Arch gate PASS）
+## v0.7.5.2 Search / fzf hot-path performance（released）
 
 v0.7.5.2 專注在搜尋與互動式 fzf 的 hot path，不改搜尋 correctness/ranking 語意：fzf 的 hidden metadata 仍由 jpnote matcher 負責，僅把不隨 query 改變的 normalization 前移成一次性 index。
 
@@ -14,9 +14,9 @@ v0.7.5.2 專注在搜尋與互動式 fzf 的 hot path，不改搜尋 correctness
 - helper process 使用 `python -I -S`，保留 cwd／`PYTHONPATH` isolation，同時避免無關 site initialization。
 - helper filter 後輸出的 row shape 與舊版完全一致，因此 token、preview path、visible 欄位、selection parsing 不變。
 - core search fall-through metadata 會重用已建立的 romaji／grammar variants，不再同 entry 重算第二次。
-- 1019-item歷史 snapshot／1046 browse rows 的代表性 query：fzf output 與 core search 結果／排序都和 v0.7.5.1 baseline 完全一致；fzf per-query reload median 約 `58–101ms → 24–28ms`（兩側皆以 `-S` 排除 container site hook），一次性 index 約 `50ms`。
+- 1019-item歷史 snapshot／1046 browse rows 的代表性 query：fzf output 與 core search 結果／排序都和 v0.7.5.1 baseline 完全一致；fzf per-query reload median 約 `58–101ms → 26–30ms`（兩側皆以 `-S` 排除 container site hook），一次性 index 約 `48ms`。
 - core schema v5、Quiz schema v2、public import JSON schema 不變。
-- 2026-09-13 actual Arch gate：完整 repository `513 passed, 36 subtests passed in 11.56s`、real fzf PASS；read-only search／Quiz smoke、0.7.5.1 → 0.7.5.2 formal install＋reinstall、installed CLI/data read-only gate、SQLite integrity 與正式 DB fingerprint immutability 全部 PASS。release commit/tag 尚未建立。
+- 2026-09-13 v0.7.5.2 release：actual Arch gate `513 passed, 36 subtests passed in 11.56s`、real fzf PASS；read-only search／Quiz smoke、0.7.5.1 → 0.7.5.2 formal install＋reinstall、SQLite integrity 與正式 DB fingerprint immutability 全部 PASS。release commit `db8ad3e2a1346cd07a07ac73c089420509a2a428` 與 annotated `v0.7.5.2` tag（tag object `7413e4c97e7fd37ee10114f694579d811dec69f6`）已建立；release-commit Core regression PASS（Windows import client 因 main-push path filter 未觸發），tag-triggered Core regression／Windows import client CI 全綠。
 
 ## v0.7.5.1 Performance architecture / bulk-read（released）
 
