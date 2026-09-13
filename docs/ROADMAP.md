@@ -1,9 +1,9 @@
 # jpnote 開發路線圖
 
-最後更新：2026-09-12（Asia/Taipei）
+最後更新：2026-09-13（Asia/Taipei）
 正式 release/tag：v0.7.5.1；annotated tag object `90d85662153cb2c1ae052e4949d0d695213a3847` 固定指向 release commit `d414472e6e40615bcc56cd8f039f5377fc829291`
-正式安裝版本：0.7.5.1
-目前開發位置：v0.7.5.1 release 已完成；release commit=`d414472e6e40615bcc56cd8f039f5377fc829291`，annotated tag `v0.7.5.1` 與 release-commit／tag-triggered Core regression、Windows import client CI 全綠。release 後只做 handoff-only documentation sync 與 idempotent cleanup，tag 不移動；下一個 runtime checkpoint 繼續 v0.7.5.x 剩餘 fzf performance／dynamic loading／bounded cleanup。GitHub 遠端變更一律由使用者親手處理，AI 僅做 read-only GitHub 查詢、隔離修改、測試與 patch 準備。
+正式安裝版本：0.7.5.2 candidate；2026-09-13 actual Arch install/reinstall gate PASS，release commit/tag 尚未建立
+目前開發位置：v0.7.5.1 release 與 post-release handoff 已完成；post-release main=`c6e585a62fc46846101c56c6842f84ca810cd351`。v0.7.5.2 search/fzf hot-path candidate 已由使用者套用並完成 actual Arch gate；matching/ranking semantics 不變。下一步完成 release commit/push/CI/tag/post-release cleanup，再進 dynamic loading／bounded cleanup。GitHub 遠端變更一律由使用者親手處理，AI 僅做 read-only GitHub 查詢、隔離修改、測試與 patch 準備。
 
 ## 0.7.2 高優先主軸 — completed
 
@@ -110,11 +110,20 @@
 
 完整開發記錄：`docs/audits/v0.7.5.1-performance-architecture.md`。
 
-### v0.7.5 remaining work after 0.7.5.1
+### v0.7.5.2 — search / fzf hot-path checkpoint（candidate；actual Arch gate PASS）
 
-- 將 0.7.5.1 建立的 bulk snapshot/index 擴展到仍有重複 normalization／hydration 的 search/fzf 路徑；避免為「共用架構」無邊界重寫已達標的 read paths。
+exact parent：post-v0.7.5.1 handoff main `c6e585a62fc46846101c56c6842f84ca810cd351`。
+
+- fzf reload dataset 預先建立 folded／compact hidden index；query change 不再逐 row full-normalize，helper output 仍還原成既有 raw row shape。
+- helper bootstrap 使用 `python -I -S`；保留 installed-path bootstrap 與 `PYTHONPATH` isolation，同時跳過無關 site initialization。
+- core `entry_match_score()` reuse romaji／grammar variant sets；不改 ranking score 或 matcher semantics。
+- 歷史 1019-item snapshot／1046 browse rows 的 baseline/candidate representative-query output 全 MATCH；fzf reload median 約 `58–101ms → 26–30ms`（兩側均使用 `-S` neutral baseline），一次性 in-process index 約 `48ms`。core search median 代表值約 `105–161ms → 96–143ms`。
+- actual Arch gate（2026-09-13）：完整 repository `513 passed, 36 subtests passed in 11.56s`、real fzf integration PASS；read-only search／Quiz smoke、0.7.5.1 → 0.7.5.2 formal install＋reinstall、installed CLI/data read-only gate、SQLite integrity 與 formal DB fingerprint immutability 全部 PASS。release commit/tag 尚未建立。
+- 新增非 timing-based regression：indexed output 等價、query normalization O(1)、no-site helper isolation、variant reuse。core schema v5／Quiz schema v2／public import schema 不變。 final assistant segmented gate `512 passed, 1 skipped, 36 subtests passed`（513 collected）；coverage `78%`（9398/2070）；isolated install＋reinstall PASS。
+
+### v0.7.5 remaining work after 0.7.5.2
+
 - Quiz 加入真正動態 loading/progress；不得以 spinner 取代實際效能改善。
-- fzf：處理 per-keypress subprocess/full normalization 的效能面；matching/ranking semantics 本身在 v0.7.6 統一。
 - 對被新架構取代的舊 implementation 做 bounded cleanup：confirmed dead code 直接刪；superseded duplicate 先遷移 caller 再刪；migration/public API/installer fallback 等 compatibility-sensitive code 不因「看似沒用」就移除。
 - release tooling UX：future actual-gate script 將 raw pytest 輸出完整寫 log，但 terminal 進度改用固定寬度／分組摘要，避免點狀 progress 因終端寬度換行。
 - release cleanup：每個版本正式完成後提供 idempotent cleanup script；已不存在的 artifact 只顯示 SKIP，不因使用者先手動清除而失敗。正式 DB、undo backups、仍在 rollback retention 內的 installed revision 不自動刪除。
@@ -127,6 +136,7 @@
 - core search 與 interactive fzf 共用同一 matcher/ranker source of truth。
 - Quiz True/False 顯示 `○／×`；`reorder_4` feedback 顯示完整句並高亮 movable portion，保留無色 fallback。
 - 保留並強化現有 kana-prompt homophone guard；基本同音詞安全已存在，不再當作「從零實作」項目。
+- Quiz 讀音題 eligibility guard：canonical/display 若只有平假名／片假名／長音／符號而不含漢字，不產生「讀音是否為～」題；例如 `けんか` 這類 prompt 已直接揭露讀音，沒有學習資訊增益。若只有漢字 alias，未來要拿 alias 當 prompt 必須另有明確且安全的 prompt-selection 規則，不能偷偷替換。
 - Quiz history export/delete TUI 入口與 history polish。
 - grammar 詳細頁 numbered paragraph hanging indent／長段落 wrapping；同一共用 renderer 也要覆蓋例句等有編號或縮排的長內容，避免編號孤立一行、續行回到最左側。
 - fzf 未分類／mistake level 空值等一般 UX，以及 fuzzy duplicate candidate／確認流程。

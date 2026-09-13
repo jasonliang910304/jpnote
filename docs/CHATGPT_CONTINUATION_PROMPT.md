@@ -7,20 +7,22 @@
 1. `docs/PROJECT_HANDOFF.md`
 2. `docs/ROADMAP.md`
 3. `docs/QUIZ_V1_SPEC.md`
-4. `docs/audits/v0.7.5.1-performance-architecture.md`
-5. `docs/audits/v0.7.5-performance-development.md`
-6. `docs/audits/quiz-development-handoff-2026-07-24.md`
-7. `docs/RELEASE_CHECKLIST.md`
-8. `docs/DELIVERY_GUIDE.md`
-9. README、CHANGELOG、USER_GUIDE
+4. `docs/audits/v0.7.5.2-search-fzf-performance.md`
+5. `docs/audits/v0.7.5.1-performance-architecture.md`
+6. `docs/audits/v0.7.5-performance-development.md`
+7. `docs/audits/quiz-development-handoff-2026-07-24.md`
+8. `docs/RELEASE_CHECKLIST.md`
+9. `docs/DELIVERY_GUIDE.md`
+10. README、CHANGELOG、USER_GUIDE
 
 ## 目前基準
 
 - 正式 release/tag：`jpnote v0.7.5.1`；annotated tag 固定指向 release commit `d414472e6e40615bcc56cd8f039f5377fc829291`（tag object `90d85662153cb2c1ae052e4949d0d695213a3847`）
-- 正式安裝版本：`jpnote 0.7.5.1`
+- 正式安裝版本：`jpnote 0.7.5.2` candidate；2026-09-13 actual Arch install/reinstall gate PASS，但 release commit/tag 尚未建立
 - v0.7.4 parent／v0.7.3 final main：`851e77add870e2a19fcbe674860828ecccf81852`
 - v0.7.5 release commit `17bbb36e6c639fc72a05845ab49273c9f98ce50d` 已 push；release-commit 與 tag-triggered Core regression／Windows import client CI 全綠。下一個 runtime 工作基線以 v0.7.5 release 後 main 為準
 - v0.7.5.1 release commit=`d414472e6e40615bcc56cd8f039f5377fc829291`；annotated tag `v0.7.5.1`（tag object `90d85662153cb2c1ae052e4949d0d695213a3847`）與 release-commit／tag-triggered Core regression、Windows import client CI 全綠；本次 post-release main 只再加 handoff-only docs sync，tag 不移動
+- post-v0.7.5.1 handoff main=`c6e585a62fc46846101c56c6842f84ca810cd351`；v0.7.5.2 candidate 以此 exact commit 為 parent，處理 search/fzf hot path且不改 matcher/ranking semantics；使用者已套用並完成 actual Arch gate
 - GitHub write policy：AI 不做 branch/commit/push/tag/PR/workflow 等遠端變更；GitHub 僅 read-only。AI 在隔離環境準備/驗證 patch，所有 GitHub 寫入由使用者親手完成
 - core SQLite schema：v5
 - Quiz SQLite：獨立 `quiz.db`，schema v2
@@ -104,14 +106,14 @@ jpnote --version
 
 ## 下一個正確工作項目
 
-Deep Adversarial Audit、v0.7.4 correctness/safety、v0.7.5 early-performance 與 v0.7.5.1 bulk-read/snapshot/parser release 都已完成。不要修改或移動既有 release tag。下一個 runtime 工作繼續 v0.7.5.x 剩餘 Performance & Architecture Cleanup；不要重做已完成的廣域 audit。
+Deep Adversarial Audit、v0.7.4 correctness/safety、v0.7.5 early-performance 與 v0.7.5.1 bulk-read/snapshot/parser release 都已完成。不要修改或移動既有 release tag。目前 v0.7.5.2 search/fzf performance candidate 以 post-release `c6e585a...` 為 exact parent，clean-apply 與 actual Arch gate 已 PASS；下一步完成 release commit/push/CI/tag/post-release cleanup，再進 dynamic loading／bounded cleanup，不重做已完成的廣域 audit。
 
 後續固定排程：
 
 1. v0.7.5 release／tag／CI／formal dataset correction 已全部完成；除非後續 runtime 變更造成 regression，不重跑已通過的 release gate。
-2. v0.7.5.1 已完成 shared source snapshot、entry/attempt outcome index、audit/export/preflight/list/romaji bulk reads 與 `parse_payload()` linearization；clean-apply、actual Arch gate、release commit/push、annotated tag 與 release/tag CI 全 PASS。完成本次 handoff/cleanup 後，直接進剩餘 fzf performance、dynamic loading 與 bounded dead-code removal。每段必須可獨立正常使用。
+2. v0.7.5.2 candidate：fzf 預先 search index、reload query-only normalization、`-S` helper bootstrap、core search variant reuse；matching/ranking semantics 保持 v0.7.5.1 等價。assistant final segmented gate `512 passed, 1 skipped, 36 subtests passed`（513 collected），coverage `78%`（9398 statements / 2070 missed），isolated install＋reinstall PASS；2026-09-13 actual Arch `513 passed, 36 subtests passed in 11.56s`＋real fzf PASS，formal install/reinstall、read-only search/Quiz smoke、SQLite/formal-DB fingerprint immutability 全 PASS。下一步 release commit/push/CI/tag/post-release cleanup，之後再進 dynamic loading 與 bounded dead-code removal。每段必須可獨立正常使用。
 3. v0.7.6 UI backlog 保留 grammar detail numbered/hanging-indent wrapping；此次使用者截圖確認「例句」等有編號或縮排的長內容也必須走同一套 wrapping renderer。
-4. v0.7.6 Search + Quiz/UI correctness：`imasu` overmatch、core/fzf ranking、`○／×`、reorder 完整句、history/hanging-indent 等。basic homophone guard 已存在，不當作未實作 foundation。
+4. v0.7.6 Search + Quiz/UI correctness：`imasu` overmatch、core/fzf ranking、`○／×`、純假名讀音題 eligibility guard、reorder 完整句、history/hanging-indent 等。basic homophone guard 已存在，不當作未實作 foundation。
 5. v0.7.7 crash/filesystem/CI hardening。
 6. v0.8.0 Tailscale-only Web/PWA/mobile architecture。
 7. v0.8.x+ learning/data features。

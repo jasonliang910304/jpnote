@@ -1,9 +1,9 @@
 # jpnote 專案交接紀錄
 
-最後更新：2026-09-12（Asia/Taipei）
+最後更新：2026-09-13（Asia/Taipei）
 正式 release/tag：`jpnote v0.7.5.1`；annotated tag object `90d85662153cb2c1ae052e4949d0d695213a3847` 固定指向 release commit `d414472e6e40615bcc56cd8f039f5377fc829291`
-正式安裝版本：`jpnote 0.7.5.1`
-目前開發 checkpoint：正式 v0.7.5.1 已完成；release commit=`d414472e6e40615bcc56cd8f039f5377fc829291`，annotated tag `v0.7.5.1` 固定指向該 commit，release-commit 與 tag-triggered Core regression／Windows import client CI 全綠。release 後只做 handoff-only docs sync 與 idempotent cleanup；下一個 runtime 工作繼續 v0.7.5.x 剩餘 performance/architecture backlog。AI 不修改 GitHub 遠端。
+正式安裝版本：`jpnote 0.7.5.2` candidate；2026-09-13 actual Arch install/reinstall gate PASS，但 release commit/tag 尚未建立
+目前開發 checkpoint：正式 v0.7.5.1 已完成，post-release handoff main=`c6e585a62fc46846101c56c6842f84ca810cd351`。使用者 repository 已套用 v0.7.5.2 search/fzf hot-path candidate，且 actual Arch full regression／real-fzf／formal install+reinstall／formal-DB immutability gate PASS；下一步是 user-controlled release commit/push、release CI、annotated tag、post-release docs sync 與 cleanup。AI 不修改 GitHub 遠端。
 
 用途：讓新的 ChatGPT 對話或新的開發工作階段，不依賴舊聊天內容也能直接接續工作。
 
@@ -51,6 +51,12 @@ candidate 869 hydration + build ≈ 1.048s
 Release tooling UX note（2026-09-12 使用者回饋）：raw `pytest -q` 的點狀 progress 會依測試批次長度造成不等寬／終端換行。未來產生 actual-gate script 時，保留完整原始 pytest output 到 log，但終端優先顯示固定寬度或分組式進度摘要；這是 gate tooling UX，不需要修改產品 runtime。
 
 v0.7.5 本輪完整開發／benchmark／coverage／actual gate／data follow-up 記錄：`docs/audits/v0.7.5-performance-development.md`。
+
+### 2026-09-13 v0.7.5.2 search/fzf performance candidate
+
+exact parent/main：`c6e585a62fc46846101c56c6842f84ca810cd351`（post-v0.7.5.1 handoff）。candidate：fzf 一次性 folded/compact dataset index、reload query O(1) normalization、`python -I -S` helper bootstrap，以及 core search variant reuse。歷史 1019-item snapshot／1046 browse rows 的 representative fzf output 與 core search result/ranking 均與 baseline 完全一致；neutral `-S` subprocess benchmark 的 fzf per-query median 約 `58–101ms → 26–30ms`，一次性 in-process index 約 `48ms`。final assistant segmented gate `512 passed, 1 skipped, 36 subtests passed`（513 collected），唯一 skip 為 container 無 real fzf；app-only coverage `78%`（9398 statements / 2070 missed）；isolated install＋reinstall PASS。2026-09-13 actual Arch gate 亦 PASS：`513 passed, 36 subtests passed in 11.56s`、real fzf PASS、read-only search／Quiz smoke、0.7.5.1 → 0.7.5.2 formal install＋reinstall、SQLite integrity 與 formal DB fingerprint immutability 全 PASS。source/installer VERSION=0.7.5.2；schema 不變；release commit/tag 尚未建立。
+
+使用者實際回報 v0.7.5/v0.7.5.1 後 Quiz 啟動效率「好上不少」，後續效能整理不得把這個已驗證 UX baseline 弄退。
 
 ### 2026-09-12 v0.7.5.1 performance architecture release
 
@@ -217,6 +223,7 @@ Quiz history 不寫入既有教材 `attempts`。
 - MCQ distractor 不足時 fallback true/false，再不足就 skip。
 - 漢字詞的意思題在不造成同音歧義時優先以假名作 prompt，降低中文字形提示。
 - 錯誤讀音只使用長音、促音、撥音等細微陷阱；禁止拿無關詞彙讀音充當假答案。
+- 新增 v0.7.6 backlog：純假名（平假名／片假名，含長音與符號）display/canonical 不出「讀音是否為～」題；`けんか` 這類題目 prompt 已等同答案。漢字 alias 不得在沒有明確 safe prompt-selection 規則時偷偷替代 canonical。
 
 ### TUI
 
@@ -267,7 +274,7 @@ GitHub release 流程已完成；release 後只做 handoff-only documentation sy
 ### v0.7.5+ 已整合 roadmap
 
 - v0.7.5：Performance & Architecture Cleanup。功能等價/資料安全優先；shared snapshot/bulk hydration、attempt identity index、Quiz O(N²)/重複 hydration、export/preflight N+1、parser、fzf performance，並清除被新架構取代且可證明安全移除的 dead/obsolete code。若過大可拆 0.7.5.1/2/3/4，每個 checkpoint 都必須獨立可正常使用。
-- v0.7.6：grammar romaji exact/ranking、core/fzf matcher 一致、Quiz `○／×`、`reorder_4` 完整句、history UI、grammar hanging indent 等 correctness/UI。現有 homophone guard 已有基本實作，只保留強化/regression。
+- v0.7.6：grammar romaji exact/ranking、core/fzf matcher 一致、Quiz `○／×`、純假名讀音題 eligibility guard、`reorder_4` 完整句、history UI、grammar hanging indent 等 correctness/UI。現有 homophone guard 已有基本實作，只保留強化/regression。
 - v0.7.7：parent-directory fsync、installer SIGKILL/stale lock、symlink chmod ownership、Windows CI trigger、Actions/dependency provenance、其他 storage hardening。
 - v0.8.0：Tailscale-only Web/PWA/mobile architecture spike，再決定受限 API、認證、session/斷線、多裝置 concurrency 與 mimir 角色。
 - v0.8.x+：grammar combinations、AI context、romaji/origin 呈現、SRS/timing/趨勢等學習功能。

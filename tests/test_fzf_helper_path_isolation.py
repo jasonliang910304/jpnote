@@ -51,6 +51,36 @@ def test_fzf_reload_command_uses_isolated_bootstrap(run, _which) -> None:
     ui_fzf._run(["entry:vocab:奇跡\t奇跡\tki se ki"], "測試", multi=False)
     command = run.call_args.args[0]
     reload_bind = next(arg for arg in command if arg.startswith("--bind=change:reload("))
-    assert " -I -c " in reload_bind
+    assert " -I -S -c " in reload_bind
     assert "runpy.run_module" in reload_bind
     assert "python3 -m jpnote_app" not in reload_bind
+
+
+def test_isolated_filter_helper_runs_without_site_packages(tmp_path: Path) -> None:
+    state = tmp_path / "state.json"
+    defaults = tmp_path / "defaults.json"
+    panel = tmp_path / "panel.tsv"
+    payload = '{"types":["grammar","vocab"],"levels":[],"results":[]}'
+    state.write_text(payload, encoding="utf-8")
+    defaults.write_text(payload, encoding="utf-8")
+    panel.write_text("", encoding="utf-8")
+
+    command = " ".join(
+        (
+            ui_fzf._isolated_module_command("jpnote_app.fzf_filter_helper"),
+            "reset",
+            shlex.quote(str(state)),
+            shlex.quote(str(panel)),
+            shlex.quote(str(defaults)),
+        )
+    )
+    result = subprocess.run(
+        ["/bin/sh", "-c", command],
+        cwd=tmp_path,
+        env={**os.environ, "PYTHONPATH": str(tmp_path / "shadow")},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
+    assert "目前：" in panel.read_text(encoding="utf-8")

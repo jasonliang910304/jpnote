@@ -1,4 +1,12 @@
 # Changelog
+## 0.7.5.2 — 2026-09-13
+
+- fzf reload-on-change 改為在開啟 selector 時一次建立 folded／compact hidden search index；每次 query reload 只正規化 query 一次並做 substring check，不再對每一列重跑 Unicode／diacritic normalization。helper 回傳給 fzf 的 row 仍維持原本 token／preview／visible／metadata shape，selection 與 preview contract 不變。
+- fzf helper bootstrap 加入 Python `-S`，避免每次 reload／filter toggle 載入與 jpnote 無關的 site-packages／`sitecustomize`；jpnote runtime 仍只依賴 Python stdlib，`-I` path-isolation guard 保留。
+- core search 的 `entry_match_score()` 重用同一 entry 已算出的 romaji／grammar variant sets，fall-through metadata 不再重算；ranking／matching semantics 不變，`imasu` overmatch 等 correctness 調整仍留在 v0.7.6。
+- 歷史 1019-item snapshot（browse 1046 rows）baseline/candidate 等價檢查：代表性 fzf query 的輸出逐行完全一致；在 baseline/candidate 都使用 `-S` 排除 container site hook 後，per-query reload median 約由 `58–101ms` 降至 `26–30ms`，一次性 in-process index 約 `48ms`。core search 代表性 query median 約由 `105–161ms` 降至 `96–143ms`，結果與排序逐項一致。
+- 新增 fzf indexed-row raw-output equivalence、query-normalization O(1)、folded-compaction equivalence、variant reuse 與 no-site helper regressions。source／installer version 更新為 0.7.5.2；core schema v5、Quiz schema v2、public import JSON schema 均不變。assistant final segmented gate `512 passed, 1 skipped, 36 subtests passed`（513 collected），唯一 skip 是隔離容器無 real fzf；app-only coverage `78%`（9398 statements / 2070 missed）；isolated install＋reinstall PASS。2026-09-13 actual Arch gate 亦 PASS：完整 repository `513 passed, 36 subtests passed in 11.56s`、real fzf integration PASS；read-only search／Quiz smoke、0.7.5.1 → 0.7.5.2 formal install＋reinstall、installed CLI/data read-only gate、SQLite integrity 與 formal DB fingerprint immutability 全部 PASS。
+
 ## 0.7.5.1 — 2026-09-12
 
 - reusable bulk-read / immutable snapshot foundation：Quiz mixed source 透過一次 `StudySourceSnapshot` 取得 entries＋attempts；source catalog 不再做兩次完整 hydration，既有 reader/fake 若沒有 bulk capability 仍保留相容 fallback。

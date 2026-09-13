@@ -13,8 +13,13 @@ import unicodedata
 from typing import Any, Iterable
 
 from .romaji import spaced_hepburn
+from .search_text import (
+    SEPARATORS as _SEPARATORS,
+    compact_folded_text,
+    compact_text,
+    fold_text,
+)
 
-_SEPARATORS = re.compile(r"[\s\-‐‑‒–—―_'’`]+")
 _KANA_RUN = re.compile(r"[ぁ-ゖゝゞァ-ヺヽヾー]+")
 _MACRON_OPTIONS = {
     "ā": ("a", "aa"),
@@ -25,18 +30,6 @@ _MACRON_OPTIONS = {
 }
 _MACRON_BASE = str.maketrans({"ā": "a", "ī": "i", "ū": "u", "ē": "e", "ō": "o"})
 
-
-def fold_text(value: str) -> str:
-    """Case-fold and compatibility-normalize text without discarding macrons."""
-    return unicodedata.normalize("NFKC", str(value or "")).casefold().strip()
-
-
-def compact_text(value: str) -> str:
-    """Create a separator- and diacritic-insensitive search token."""
-    folded = fold_text(value)
-    decomposed = unicodedata.normalize("NFKD", folded)
-    without_marks = "".join(char for char in decomposed if not unicodedata.combining(char))
-    return _SEPARATORS.sub("", without_marks)
 
 
 def compact_romaji(value: str, *, keep_macrons: bool = False) -> str:
@@ -130,8 +123,18 @@ def grammar_romaji_variants(entry: dict[str, Any]) -> set[str]:
     return {value for value in variants if value}
 
 
-def entry_search_metadata(entry: dict[str, Any]) -> str:
-    """Build hidden fzf/search metadata without changing visible presentation."""
+def entry_search_metadata(
+    entry: dict[str, Any],
+    *,
+    romaji_variant_values: set[str] | None = None,
+    grammar_variant_values: set[str] | None = None,
+) -> str:
+    """Build hidden fzf/search metadata without changing visible presentation.
+
+    Search scoring may already have derived the expensive romaji variant sets.
+    Optional values let that hot path reuse them without changing the public
+    one-argument behavior used by browse/fzf callers.
+    """
     values: list[str] = []
     for field in (
         "key", "display", "reading", "romaji", "level", "review_group",
@@ -141,8 +144,12 @@ def entry_search_metadata(entry: dict[str, Any]) -> str:
         if value:
             values.append(value)
     values.extend(str(value) for value in entry.get("aliases", []) if str(value).strip())
-    values.extend(sorted(romaji_variants(str(entry.get("romaji") or ""))))
-    values.extend(sorted(grammar_romaji_variants(entry)))
+    if romaji_variant_values is None:
+        romaji_variant_values = romaji_variants(str(entry.get("romaji") or ""))
+    if grammar_variant_values is None:
+        grammar_variant_values = grammar_romaji_variants(entry)
+    values.extend(sorted(romaji_variant_values))
+    values.extend(sorted(grammar_variant_values))
     for source in entry.get("sources", []):
         value = str(source or "").strip()
         if value:
@@ -192,7 +199,7 @@ def entry_match_score(entry: dict[str, Any], query: str, *, sql_match: bool = Fa
     raw = fold_text(query)
     if not raw:
         return 100 if sql_match else None
-    compact_query = compact_text(query)
+    compact_query = compact_folded_text(raw)
 
     key = fold_text(str(entry.get("key") or ""))
     display = fold_text(str(entry.get("display") or ""))
@@ -209,6 +216,8 @@ def entry_match_score(entry: dict[str, Any], query: str, *, sql_match: bool = Fa
     if raw == romaji:
         return 3
 
+    variants: set[str] | None = None
+    grammar_variants: set[str] | None = None
     if compact_query:
         compact_original = compact_text(romaji)
         if compact_query == compact_original:
@@ -245,7 +254,11 @@ def entry_match_score(entry: dict[str, Any], query: str, *, sql_match: bool = Fa
     # The enriched metadata document is shared with interactive browse/fzf.  It
     # includes meanings/examples, sources, relation notes/sources, aliases and
     # romaji variants, so core search and browse cannot silently diverge.
-    metadata = entry_search_metadata(entry)
+    metadata = entry_search_metadata(
+        entry,
+        romaji_variant_values=variants,
+        grammar_variant_values=grammar_variants,
+    )
     folded_metadata = fold_text(metadata)
     if raw and raw in folded_metadata:
         return 20

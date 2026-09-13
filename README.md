@@ -1,10 +1,22 @@
-# jpnote v0.7.5.1
+# jpnote v0.7.5.2
 
 > **專案聲明**
 >
 > jpnote 的構想、功能需求、使用情境與開發方向由 **Jason Liang** 提供；本專案的所有程式碼均由 **OpenAI ChatGPT** 產生。Jason Liang 負責實際使用、測試、問題回報，以及功能與設計取捨。
 
 本版將原本 1,200 多行的單檔腳本拆成可重用的核心模組與可選介面層。
+
+## v0.7.5.2 Search / fzf hot-path performance（candidate；actual Arch gate PASS）
+
+v0.7.5.2 專注在搜尋與互動式 fzf 的 hot path，不改搜尋 correctness/ranking 語意：fzf 的 hidden metadata 仍由 jpnote matcher 負責，僅把不隨 query 改變的 normalization 前移成一次性 index。
+
+- fzf dataset 啟動時一次建立 folded／compact index；reload helper 每次只正規化 query 一次，不再逐 row 重算完整 metadata normalization。
+- helper process 使用 `python -I -S`，保留 cwd／`PYTHONPATH` isolation，同時避免無關 site initialization。
+- helper filter 後輸出的 row shape 與舊版完全一致，因此 token、preview path、visible 欄位、selection parsing 不變。
+- core search fall-through metadata 會重用已建立的 romaji／grammar variants，不再同 entry 重算第二次。
+- 1019-item歷史 snapshot／1046 browse rows 的代表性 query：fzf output 與 core search 結果／排序都和 v0.7.5.1 baseline 完全一致；fzf per-query reload median 約 `58–101ms → 24–28ms`（兩側皆以 `-S` 排除 container site hook），一次性 index 約 `50ms`。
+- core schema v5、Quiz schema v2、public import JSON schema 不變。
+- 2026-09-13 actual Arch gate：完整 repository `513 passed, 36 subtests passed in 11.56s`、real fzf PASS；read-only search／Quiz smoke、0.7.5.1 → 0.7.5.2 formal install＋reinstall、installed CLI/data read-only gate、SQLite integrity 與正式 DB fingerprint immutability 全部 PASS。release commit/tag 尚未建立。
 
 ## v0.7.5.1 Performance architecture / bulk-read（released）
 
@@ -412,13 +424,13 @@ jpnote recent --format json           # 結構化輸出
 ## 安裝
 
 ```bash
-mkdir -p /tmp/jpnote-v0.7.5.1
+mkdir -p /tmp/jpnote-v0.7.5.2
 
-tar -xzf ~/Downloads/jpnote-v0.7.5.1.tar.gz \
-  -C /tmp/jpnote-v0.7.5.1 \
+tar -xzf ~/Downloads/jpnote-v0.7.5.2.tar.gz \
+  -C /tmp/jpnote-v0.7.5.2 \
   --strip-components=1
 
-/tmp/jpnote-v0.7.5.1/install.sh
+/tmp/jpnote-v0.7.5.2/install.sh
 jpnote init
 ```
 

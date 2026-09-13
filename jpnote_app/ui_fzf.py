@@ -17,6 +17,7 @@ from typing import Any, Iterable
 
 from .browsing import DEFAULT_TYPES, LEVEL_VALUES, RESULT_VALUES, TYPE_LABELS
 from .fzf_filter_helper import SHORTCUT_TOKENS, read_state, render_panel, summary as _panel_summary, write_state
+from .fzf_search_helper import append_search_index
 from .presentation import render_attempt, render_entry, render_recent_detail
 from .search_normalization import attempt_search_metadata, entry_search_metadata
 from .terminal_style import enabled as color_enabled, style, tone
@@ -66,6 +67,7 @@ def _isolated_module_command(module: str) -> str:
         (
             shlex.quote(sys.executable),
             "-I",
+            "-S",
             "-c",
             shlex.quote(bootstrap),
         )
@@ -101,8 +103,12 @@ def _execute(
         else:
             rendered = list(lines)
 
+        indexed_rendered = [append_search_index(line) for line in rendered]
         dataset_path = root / "records.tsv"
-        dataset_path.write_text("\n".join(rendered) + ("\n" if rendered else ""), encoding="utf-8")
+        dataset_path.write_text(
+            "\n".join(indexed_rendered) + ("\n" if indexed_rendered else ""),
+            encoding="utf-8",
+        )
         helper = _isolated_module_command("jpnote_app.fzf_search_helper")
         dataset_arg = shlex.quote(str(dataset_path))
         reload_command = f"{helper} {dataset_arg} {{q}}"
