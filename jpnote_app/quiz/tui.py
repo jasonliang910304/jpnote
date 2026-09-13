@@ -11,11 +11,19 @@ import curses
 import locale
 import sys
 from collections.abc import Sequence
+from queue import Empty, Queue
+from threading import Thread
 from typing import Any
 
 from jpnote_app.study_sources import StudySourceService
 
-from .service import QuizService
+from .service import (
+    QUIZ_PROGRESS_BUILDING_QUESTIONS,
+    QUIZ_PROGRESS_CREATING_SESSION,
+    QUIZ_PROGRESS_LOADING_SOURCES,
+    QUIZ_PROGRESS_OPENING_QUESTION,
+    QuizService,
+)
 from .session_store import QuizSessionStore
 from .tui_controller import QuizTuiController, RenderedScreen
 
@@ -105,14 +113,100 @@ def _starts_slow_session_action(controller: QuizTuiController, key: str) -> bool
     return False
 
 
-def _preparing_screen() -> RenderedScreen:
+_LOADING_STAGE_LABELS = {
+    QUIZ_PROGRESS_LOADING_SOURCES: "讀取題庫",
+    QUIZ_PROGRESS_BUILDING_QUESTIONS: "生成安全題目",
+    QUIZ_PROGRESS_CREATING_SESSION: "建立測驗紀錄",
+    QUIZ_PROGRESS_OPENING_QUESTION: "開啟第一題",
+}
+_LOADING_SPINNER = (
+    "⠋",
+    "⠙",
+    "⠹",
+    "⠸",
+    "⠼",
+    "⠴",
+    "⠦",
+    "⠧",
+    "⠇",
+    "⠏",
+)
+_LOADING_REFRESH_SECONDS = 0.08
+
+
+def _loading_screen(stage: str, frame: int) -> RenderedScreen:
+    spinner = _LOADING_SPINNER[frame % len(_LOADING_SPINNER)]
+    label = _LOADING_STAGE_LABELS.get(stage, "啟動準備流程")
     return RenderedScreen(
         lines=(
-            "正在準備題目……",
+            f"{spinner} 正在準備題目……",
             "",
-            "正在讀取題庫、生成安全選項並建立測驗紀錄。",
+            f"目前步驟：{label}",
         )
     )
+
+
+def _run_slow_session_action(
+    stdscr: curses.window,
+    controller: QuizTuiController,
+    key: str,
+) -> None:
+    events: Queue[tuple[str, object]] = Queue()
+
+    def report(stage: str) -> None:
+        events.put(("progress", stage))
+
+    def worker_action() -> None:
+        try:
+            service = getattr(controller, "service", None)
+            progress_scope = getattr(service, "progress_reporting", None)
+            if callable(progress_scope):
+                with progress_scope(report):
+                    controller.handle_key(key)
+            else:
+                controller.handle_key(key)
+        except BaseException as exc:
+            events.put(("error", exc))
+        else:
+            events.put(("done", None))
+
+    worker = Thread(
+        target=worker_action,
+        name="jpnote-quiz-prepare",
+        daemon=False,
+    )
+    stage = ""
+    frame = 0
+    _draw(stdscr, _loading_screen(stage, frame))
+    worker.start()
+    try:
+        while True:
+            try:
+                event, payload = events.get(timeout=_LOADING_REFRESH_SECONDS)
+            except Empty:
+                frame += 1
+                _draw(stdscr, _loading_screen(stage, frame))
+                continue
+
+            if event == "progress":
+                assert isinstance(payload, str)
+                stage = payload
+                frame += 1
+                _draw(stdscr, _loading_screen(stage, frame))
+                continue
+
+            worker.join()
+            if event == "error":
+                assert isinstance(payload, BaseException)
+                raise payload
+            return
+    finally:
+        # v1 deliberately has no cancellation boundary.  If the main loop is
+        # interrupted while preparation is mutating Quiz persistence, let the
+        # worker settle before outer interruption handling marks any created
+        # active session interrupted.
+        if worker.is_alive():
+            worker.join()
 
 
 def _run_curses(
@@ -147,8 +241,9 @@ def _run_curses(
             key = _normalize_key(value)
             if key:
                 if _starts_slow_session_action(controller, key):
-                    _draw(stdscr, _preparing_screen())
-                controller.handle_key(key)
+                    _run_slow_session_action(stdscr, controller, key)
+                else:
+                    controller.handle_key(key)
     except BaseException:
         controller.interrupt_active_session()
         raise

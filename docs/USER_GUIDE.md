@@ -1,6 +1,6 @@
 # jpnote 使用者操作手冊
 
-本手冊對應 jpnote v0.7.5.2 開發版。`jpnote --help` 提供精簡指令索引；`jpnote manual` 會輸出這份完整手冊，`jpnote manual --path` 會顯示手冊檔案位置。
+本手冊對應 jpnote v0.7.5.3 開發版。`jpnote --help` 提供精簡指令索引；`jpnote manual` 會輸出這份完整手冊，`jpnote manual --path` 會顯示手冊檔案位置。
 
 > 原則：任何會修改資料的操作都應先確認輸入與備份；`--check` 是真正 read-only 的預檢，不會建立、升級、修復或改寫實體資料庫。
 
@@ -22,7 +22,7 @@
 
 ```bash
 mkdir -p /tmp/jpnote-install
-tar -xzf jpnote-v0.7.5.2.tar.gz -C /tmp/jpnote-install --strip-components=1
+tar -xzf jpnote-v0.7.5.3.tar.gz -C /tmp/jpnote-install --strip-components=1
 /tmp/jpnote-install/install.sh
 rehash
 jpnote --version

@@ -558,9 +558,12 @@ class CoreCiContractTests(unittest.TestCase):
         self.assertIn("sh ./install.sh", workflow)
         self.assertIn("actions/checkout@v6", workflow)
         self.assertIn("actions/setup-python@v6", workflow)
+        self.assertIn(f"test \"$version\" = 'jpnote {VERSION}'", workflow)
+        self.assertIn(f"/jpnote/{VERSION}/current", workflow)
+        self.assertIn(f"/jpnote/{VERSION}/docs/USER_GUIDE.md", workflow)
 
     def test_current_release_declares_python_310_minimum(self) -> None:
-        self.assertEqual(VERSION, "0.7.5.2")
+        self.assertEqual(VERSION, "0.7.5.3")
         installer = (ROOT / "install.sh").read_text(encoding="utf-8")
         guide = (ROOT / "docs" / "USER_GUIDE.md").read_text(encoding="utf-8")
         self.assertIn('MIN_PYTHON="3.10"', installer)

@@ -1,4 +1,13 @@
 # Changelog
+## 0.7.5.3 — 2026-09-13
+
+- Quiz 開始測驗改為 main-thread curses＋單一 worker 的動態 loading：worker 執行讀取題庫、生成安全題目、建立 session、開啟第一題；main thread 持續繪製 spinner 與真實 coarse stage，不顯示假百分比，也不讓 worker 呼叫 curses。
+- `QuizService` 以預設關閉的 `ContextVar` progress observer 回報 `loading_sources`／`building_questions`／`creating_session`／`opening_question`；observer failure fail-soft，不改 headless/debug caller、question selection 或 persistence semantics。題庫不足確認仍直接重用第一次 immutable `QuestionPoolPlan`。
+- 第一版 loading 不加入 cancellation；外層中斷時先讓不可取消的 persistence worker 收斂，再沿既有 active-session interrupted recovery。controller-private 永遠為 false 的 `allow_shortage` 參數已移除，但 public/service `QuizService.start_session(... allow_shortage=...)` 保留。
+- continuation prompt 的 release baseline 檢查由過期的 `v0.7.5.1^{}` 修正為 `v0.7.5.2^{}`。release finalization 同步 core Actions isolated-install smoke 至 0.7.5.3，並新增 contract regression，避免後續版本再次只更新 runtime version 而漏掉 CI version expectation。
+- source／installer version 更新為 0.7.5.3；core schema v5、Quiz schema v2、public import JSON schema 均不變，沒有 database login／authentication／permission／migration 規則變更。
+- 2026-09-13 actual Arch：第一次 gate 前五 stage PASS，full suite 僅抓到一個 stale release-version assertion（`519 passed, 1 failed, 36 subtests passed`）；修正後 10-stage resume gate 全 PASS，包含 clean detached worktree apply／byte equality、targeted regression、full repository pytest、real fzf、0.7.5.2 → 0.7.5.3 formal install、0.7.5.3 reinstall／installed smoke。正式 DB fingerprint 從原始 pre-gate 到最後完全不變：SHA-256 `00f920c00eae40927c335c22c146c48d020329081e6175a6d76a957b79112478`、size `1568768`、mtime-ns `1789232804493312163`、mode `0600`。
+
 ## 0.7.5.2 — 2026-09-13
 
 - fzf reload-on-change 改為在開啟 selector 時一次建立 folded／compact hidden search index；每次 query reload 只正規化 query 一次並做 substring check，不再對每一列重跑 Unicode／diacritic normalization。helper 回傳給 fzf 的 row 仍維持原本 token／preview／visible／metadata shape，selection 與 preview contract 不變。

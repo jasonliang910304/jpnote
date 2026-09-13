@@ -1,10 +1,23 @@
-# jpnote v0.7.5.2
+# jpnote v0.7.5.3
 
 > **專案聲明**
 >
 > jpnote 的構想、功能需求、使用情境與開發方向由 **Jason Liang** 提供；本專案的所有程式碼均由 **OpenAI ChatGPT** 產生。Jason Liang 負責實際使用、測試、問題回報，以及功能與設計取捨。
 
 本版將原本 1,200 多行的單檔腳本拆成可重用的核心模組與可選介面層。
+
+## v0.7.5.3 Quiz dynamic loading / bounded cleanup（candidate；actual Arch gate PASS）
+
+v0.7.5.3 完成 v0.7.5.x 剩餘的 Quiz loading UX，不改題目選擇、固定 seed 題目語意或資料 schema：
+
+- curses/window API 全部留在 main thread；只有開始測驗的慢速 preparation action 進入單一 non-daemon worker。
+- loading 畫面持續顯示 spinner 與真實 coarse stage：讀取題庫、生成安全題目、建立測驗紀錄、開啟第一題；不使用無法量測的假百分比。
+- shortage 確認沿用第一次建立的 immutable plan，不為了 loading UI 重新讀 core source 或重建題庫。
+- worker exception 回傳 main thread；若 session 已建立而第一題載入失敗，既有 interruption hook 仍可把 active session 標成 `interrupted` 並於下次恢復。
+- 第一版不提供 loading 中途取消，避免切斷 SQLite persistence boundary；service progress observer 預設關閉且 fail-soft。
+- bounded cleanup 只移除 controller-private 永遠為 false 的 `allow_shortage` 參數；service compatibility surface 保留。
+- core schema v5、Quiz schema v2、public import JSON schema 不變；沒有 DB 登入、權限或 migration 規則變更。
+- 2026-09-13 actual Arch 10-stage resume gate 全 PASS：full repository pytest、real fzf、0.7.5.2 → 0.7.5.3 install、0.7.5.3 reinstall／installed smoke 與正式 DB fingerprint immutability 全部通過。release commit/tag 尚未建立。
 
 ## v0.7.5.2 Search / fzf hot-path performance（released）
 
@@ -424,13 +437,13 @@ jpnote recent --format json           # 結構化輸出
 ## 安裝
 
 ```bash
-mkdir -p /tmp/jpnote-v0.7.5.2
+mkdir -p /tmp/jpnote-v0.7.5.3
 
-tar -xzf ~/Downloads/jpnote-v0.7.5.2.tar.gz \
-  -C /tmp/jpnote-v0.7.5.2 \
+tar -xzf ~/Downloads/jpnote-v0.7.5.3.tar.gz \
+  -C /tmp/jpnote-v0.7.5.3 \
   --strip-components=1
 
-/tmp/jpnote-v0.7.5.2/install.sh
+/tmp/jpnote-v0.7.5.3/install.sh
 jpnote init
 ```
 

@@ -227,6 +227,14 @@ q           暫停／退出選單
 - TUI framework 尚未最終定案；優先評估 Python-native framework，Textual 是候選之一。
 - Quiz core 不得依賴 TUI，必須可單元測試與 headless 測試。
 
+### 開始測驗 loading
+
+- curses/window API 僅能在 main thread 執行。
+- 讀取題庫、生成安全題目、建立 session 與開啟第一題可在單一 worker thread 執行。
+- loading UI 顯示真實 coarse stage，不顯示無法量測的假百分比。
+- 題庫不足確認必須沿用第一次建立的 immutable plan，不得因 loading UX 再讀來源或重建題庫。
+- 第一版 loading 不提供中途取消；若外層中斷，先讓 persistence worker 收斂，再沿既有 interrupted recovery 處理。
+
 ---
 
 ## 10. Session 狀態與恢復

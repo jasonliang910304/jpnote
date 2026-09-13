@@ -465,7 +465,7 @@ class QuizTuiController:
             if self.state.setup_focus < 2:
                 self.state.setup_focus += 1
             else:
-                self._start_session(allow_shortage=False)
+                self._start_session()
         elif key == "q":
             self.state.should_exit = True
 
@@ -835,7 +835,7 @@ class QuizTuiController:
         session = self.service.continue_session(summary.session_id)
         self._load_session(session.summary.session_id)
 
-    def _start_session(self, *, allow_shortage: bool) -> None:
+    def _start_session(self) -> None:
         if not self.state.seed:
             self.state.seed = self._seed_factory()
         result = self.service.start_session(
@@ -844,7 +844,6 @@ class QuizTuiController:
             levels=self.state.levels or None,
             sources=self.state.sources or None,
             seed=self.state.seed,
-            allow_shortage=allow_shortage,
         )
         if result.status == "confirmation_required":
             self.state.shortage_result = result

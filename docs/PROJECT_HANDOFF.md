@@ -2,8 +2,8 @@
 
 最後更新：2026-09-13（Asia/Taipei）
 正式 release/tag：`jpnote v0.7.5.2`；annotated tag object `7413e4c97e7fd37ee10114f694579d811dec69f6` 固定指向 release commit `db8ad3e2a1346cd07a07ac73c089420509a2a428`
-正式安裝版本：`jpnote 0.7.5.2`
-目前開發 checkpoint：v0.7.5.2 search/fzf hot-path release 已完成；release commit=`db8ad3e2a1346cd07a07ac73c089420509a2a428`、annotated tag object=`7413e4c97e7fd37ee10114f694579d811dec69f6`，tag-triggered Core regression／Windows import client CI 全綠。現在只做 handoff-only docs sync 與 cleanup；下一個 runtime checkpoint 進 dynamic Quiz loading/progress＋bounded dead-code cleanup。AI 不修改 GitHub 遠端。
+正式安裝版本：`jpnote 0.7.5.3` candidate（actual Arch install/reinstall gate PASS；formal release/tag 尚為 v0.7.5.2）
+目前開發 checkpoint：以 post-v0.7.5.2 handoff main `84697394c6a64629f0a0e97ebaa970f1e1e8e44f` 為 exact parent 的 v0.7.5.3 dynamic Quiz loading/progress＋bounded dead-code cleanup candidate 已完成 actual Arch runtime/install/formal-DB gate；10-stage resume gate 全 PASS，正式 DB fingerprint 完全不變。現在只剩 release-finalization contract/docs、release commit/push、annotated tag 與 release CI；core schema v5、Quiz schema v2、public import schema 不變。AI 不修改 GitHub 遠端。
 
 用途：讓新的 ChatGPT 對話或新的開發工作階段，不依賴舊聊天內容也能直接接續工作。
 
@@ -55,6 +55,12 @@ v0.7.5 本輪完整開發／benchmark／coverage／actual gate／data follow-up 
 ### 2026-09-13 v0.7.5.2 search/fzf performance release
 
 exact parent/main：`c6e585a62fc46846101c56c6842f84ca810cd351`（post-v0.7.5.1 handoff）。fzf 一次性 folded/compact dataset index、reload query O(1) normalization、`python -I -S` helper bootstrap，以及 core search variant reuse。歷史 1019-item snapshot／1046 browse rows 的 representative fzf output 與 core search result/ranking 均與 baseline 完全一致；neutral `-S` subprocess benchmark 的 fzf per-query median 約 `58–101ms → 26–30ms`，一次性 in-process index 約 `48ms`。final assistant segmented gate `512 passed, 1 skipped, 36 subtests passed`（513 collected），唯一 skip 為 container 無 real fzf；app-only coverage `78%`（9398 statements / 2070 missed）；isolated install＋reinstall PASS。2026-09-13 actual Arch gate 亦 PASS：`513 passed, 36 subtests passed in 11.56s`、real fzf PASS、read-only search／Quiz smoke、0.7.5.1 → 0.7.5.2 formal install＋reinstall、SQLite integrity 與 formal DB fingerprint immutability 全 PASS。release commit=`db8ad3e2a1346cd07a07ac73c089420509a2a428`；annotated `v0.7.5.2` tag object=`7413e4c97e7fd37ee10114f694579d811dec69f6`。release-commit Core regression PASS（Windows import client 因 main-push path filter 未觸發）；tag-triggered Core regression／Windows import client CI 全綠。source/installer VERSION=0.7.5.2；schema 不變。
+
+### 2026-09-13 v0.7.5.3 dynamic Quiz loading release candidate — actual gate PASS
+
+exact parent/main：`84697394c6a64629f0a0e97ebaa970f1e1e8e44f`（post-v0.7.5.2 handoff）。開始測驗 preparation 移到單一 non-daemon worker；curses/window 仍只在 main thread。service 以預設關閉、fail-soft 的 progress context 回報讀取題庫／生成安全題目／建立 session／開第一題，shortage confirmation 沿用第一次 immutable plan。controller-private dead `allow_shortage` 參數移除，service compatibility parameter 保留；第一版不提供 cancellation。source/installer VERSION=0.7.5.3；core schema=5；Quiz schema=2；public import JSON schema unchanged；沒有 DB login/auth/permission/migration 變更。
+
+第一次 actual Arch gate 在 full suite 找到唯一 stale release-version assertion：`519 passed, 1 failed, 36 subtests passed`；修正後 resume gate **ALL 10 STAGES PASS**，包含 clean detached worktree apply／byte equality、targeted/full pytest、real fzf、0.7.5.2 → 0.7.5.3 formal install＋reinstall、installed smoke 與 DB post-fingerprint。正式 core DB 從原始 pre-gate 到最後 fingerprint 完全不變：SHA-256 `00f920c00eae40927c335c22c146c48d020329081e6175a6d76a957b79112478`、size `1568768`、mtime-ns `1789232804493312163`、mode `0600`。成功 resume log=`~/Downloads/jpnote-v0753-arch-gate-resume-20260913T224916.log`；release-finalization review 另發現 Core Actions installer smoke 尚硬編碼 0.7.5.2，本 release candidate 一併補正並加入對應 contract regression，避免同類漏項再次發生。
 
 使用者實際回報 v0.7.5/v0.7.5.1 後 Quiz 啟動效率「好上不少」，後續效能整理不得把這個已驗證 UX baseline 弄退。
 

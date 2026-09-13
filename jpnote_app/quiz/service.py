@@ -8,8 +8,9 @@ internals.
 from __future__ import annotations
 
 from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import Iterator, Sequence
+from typing import Callable, Iterator, Sequence
 
 from jpnote_app.study_sources import (
     AttemptReplaySource,
@@ -34,6 +35,11 @@ from .session_store import QuizSessionStore
 START_STATUSES = frozenset({"started", "confirmation_required", "no_safe_questions"})
 RESUMABLE_SESSION_STATES = frozenset({"active", "paused", "interrupted"})
 SOURCE_DETAIL_STATUSES = frozenset({"available", "missing", "unavailable"})
+QUIZ_PROGRESS_LOADING_SOURCES = "loading_sources"
+QUIZ_PROGRESS_BUILDING_QUESTIONS = "building_questions"
+QUIZ_PROGRESS_CREATING_SESSION = "creating_session"
+QUIZ_PROGRESS_OPENING_QUESTION = "opening_question"
+QuizProgressReporter = Callable[[str], None]
 
 
 class QuizServiceError(RuntimeError):
@@ -157,6 +163,33 @@ class QuizService:
             raise TypeError("source_reader 必須實作 QuestionSourceReader")
         self._source_reader = source_reader
         self._session_store = session_store
+        self._progress_reporter: ContextVar[QuizProgressReporter | None] = ContextVar(
+            "jpnote_quiz_progress_reporter",
+            default=None,
+        )
+
+    @contextmanager
+    def progress_reporting(self, reporter: QuizProgressReporter) -> Iterator[None]:
+        """Temporarily expose truthful preparation stages to an outer UI."""
+
+        if not callable(reporter):
+            raise TypeError("reporter 必須可呼叫")
+        token = self._progress_reporter.set(reporter)
+        try:
+            yield
+        finally:
+            self._progress_reporter.reset(token)
+
+    def _report_progress(self, stage: str) -> None:
+        reporter = self._progress_reporter.get()
+        if reporter is None:
+            return
+        try:
+            reporter(stage)
+        except Exception:
+            # Progress is observational UI metadata.  A broken renderer must not
+            # change Quiz planning or persistence semantics.
+            pass
 
     @property
     def source_reader(self) -> QuestionSourceReader:
@@ -192,6 +225,7 @@ class QuizService:
         if mode not in QUIZ_MODES:
             raise ValueError(f"不支援的 Quiz mode：{mode}")
 
+        self._report_progress(QUIZ_PROGRESS_LOADING_SOURCES)
         entries = ()
         attempts = ()
         snapshot_loader = getattr(self._source_reader, "load_snapshot", None)
@@ -216,6 +250,7 @@ class QuizService:
                 sources=sources,
             )
 
+        self._report_progress(QUIZ_PROGRESS_BUILDING_QUESTIONS)
         return QuestionPoolBuilder(seed=seed).build(
             mode=mode,
             requested_count=requested_count,
@@ -268,6 +303,7 @@ class QuizService:
             return QuizStartResult(status="no_safe_questions", plan=plan)
         if plan.report.selected_count != len(plan.questions):
             raise QuizValidationError("Quiz plan selected_count 與實際題數不一致")
+        self._report_progress(QUIZ_PROGRESS_CREATING_SESSION)
         session = self._session_store.create_session(
             mode=plan.report.mode,
             questions=plan.questions,
@@ -276,6 +312,7 @@ class QuizService:
         return QuizStartResult(status="started", plan=plan, session=session)
 
     def current_question(self, session_id: str) -> QuestionEventSnapshot | None:
+        self._report_progress(QUIZ_PROGRESS_OPENING_QUESTION)
         return self._session_store.next_question(session_id)
 
     def submit_choice(
