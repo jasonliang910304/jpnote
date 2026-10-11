@@ -109,7 +109,7 @@ jpnote --version
 
 ## 下一個正確工作項目
 
-Deep Adversarial Audit、v0.7.4 correctness/safety 與 v0.7.5.x releases 都已完成；既有 release tag 不得修改或移動。v0.7.6 dev1 已 commit/push 且 Core #58、Windows import client #23 全綠；目前 dev2 coupled 處理 search correctness：core 與 interactive fzf 共用 score 0–6 對應的 strong exact/whole forms，`imasu` 有 strong match 時不得留下 `kimasu/shimasu/arimasu/moraimasu` 等 relaxed suffix overmatch，沒有 strong match 時仍須保留 substring fallback。不要重做已完成的廣域 audit。
+Deep Adversarial Audit、v0.7.4 correctness/safety 與 v0.7.5.x releases 都已完成；既有 release tag 不得修改或移動。v0.7.6 dev1/dev2 已 commit/push，dev2 Core #59 全綠；目前 dev3 是 Quiz presentation-only slice：True/False live/history 以 `○／×` 呈現但不改 snapshot，`reorder_4` live/history feedback 以 `before + 【movable】 + after` 顯示完整句，缺 context 時只退回 bracketed answer。下一步再處理 history export/delete 或 hanging-indent UI，不重做已完成的廣域 audit。
 
 後續固定排程：
 

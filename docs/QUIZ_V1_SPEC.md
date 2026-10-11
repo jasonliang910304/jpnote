@@ -205,6 +205,12 @@ jpnote quiz
 
 保持節奏簡潔，但仍顯示實際正解（例如詞彙、讀音、意思或完整重組句），讓猜對者也能確認；完整詳細內容不強制展開。
 
+### True/False 與 reorder 呈現
+
+- True/False 的 TUI 選項與回饋以 `○／×` 顯示；immutable snapshot 仍保留 stable `true/false` choice ID 與既有文字，不為 UI 美化改寫歷史資料。
+- `reorder_4` feedback 在原題 `before/after` 可用時顯示完整句，並以 `【…】` 標示本題可移動／重組的片段；這個符號同時是無色 terminal fallback。
+- 若原始 context 已不存在或不可用，只顯示 `【重組答案】`，不得臆造缺失的固定句子部分。
+
 ---
 
 ## 9. TUI 操作

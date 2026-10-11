@@ -5,7 +5,12 @@ from pathlib import Path
 
 import pytest
 
-from jpnote_app.quiz.service import QuizService
+from jpnote_app.quiz.generators import QuestionGenerator
+from jpnote_app.quiz.service import QuizAnswerFeedback, QuizService
+from jpnote_app.quiz.session_models import (
+    AnswerSnapshot,
+    QuestionEventSnapshot,
+)
 from jpnote_app.quiz.session_store import QuizSessionStore
 from jpnote_app.quiz.tui import (
     _configure_default_background,
@@ -65,13 +70,13 @@ def reorder_attempt() -> AttemptReplaySource:
         user_answer="",
         correct_answer="",
         reason="",
-        before="",
-        after="",
+        before="私は",
+        after="。",
         parts=(
-            ReorderPartSnapshot(1, "私"),
-            ReorderPartSnapshot(2, "は"),
-            ReorderPartSnapshot(3, "学生"),
-            ReorderPartSnapshot(4, "です"),
+            ReorderPartSnapshot(1, "昨日"),
+            ReorderPartSnapshot(2, "図書館"),
+            ReorderPartSnapshot(3, "へ"),
+            ReorderPartSnapshot(4, "行きました"),
         ),
         user_order=(2, 1, 4, 3),
         correct_order=(1, 2, 3, 4),
@@ -279,6 +284,69 @@ def test_reorder_space_backspace_and_enter(tmp_path):
     assert controller.state.screen == "feedback"
     assert controller.state.feedback is not None
     assert controller.state.feedback.correct
+    rendered = "\n".join(controller.render(120, 40).lines)
+    assert "正解完整句：私は【昨日図書館へ行きました】。" in rendered
+
+
+def test_reorder_wrong_feedback_shows_full_user_and_correct_sentences(tmp_path):
+    controller, _ = make_controller(
+        tmp_path, attempts=(reorder_attempt(),), count=1
+    )
+    start_from_setup(controller, mode="mistake")
+    for key in ("2", "1", "3", "4"):
+        controller.handle_key(key)
+    controller.handle_key("ENTER")
+    assert controller.state.feedback is not None
+    assert not controller.state.feedback.correct
+    rendered = "\n".join(controller.render(120, 40).lines)
+    assert "正解完整句：私は【昨日図書館へ行きました】。" in rendered
+    assert "你的答案：私は【図書館昨日へ行きました】。" in rendered
+
+
+def test_true_false_tui_uses_circle_cross_without_rewriting_snapshot(tmp_path):
+    controller, _ = make_controller(tmp_path)
+    question = QuestionGenerator(seed=0).vocabulary_meaning_true_false(
+        vocab(1),
+        prefer_false=False,
+    )
+    assert question is not None
+    assert [choice.text for choice in question.choices] == ["正確", "錯誤"]
+
+    event = QuestionEventSnapshot(
+        question_event_id="quiz-question:truth",
+        session_id="quiz-session:truth",
+        position=1,
+        question=question,
+    )
+    controller.state.current_question = event
+    controller.state.screen = "question"
+    rendered = "\n".join(controller.render(120, 40).lines)
+    assert "○" in rendered
+    assert "×" in rendered
+    assert " 正確" not in rendered
+    assert " 錯誤" not in rendered
+
+    answered = QuestionEventSnapshot(
+        question_event_id=event.question_event_id,
+        session_id=event.session_id,
+        position=event.position,
+        question=question,
+        user_answer=AnswerSnapshot("false", "錯誤"),
+        result="incorrect",
+        answered_at="2026-10-12T03:00:00+08:00",
+    )
+    controller.state.feedback = QuizAnswerFeedback(
+        session=None,  # renderer does not consult the session snapshot
+        question=answered,
+        correct=False,
+        skipped=False,
+    )
+    controller.state.source_details = None
+    controller.state.screen = "feedback"
+    feedback_text = "\n".join(controller.render(120, 40).lines)
+    assert "正確答案：○" in feedback_text
+    assert "你的答案：×" in feedback_text
+    assert question.correct_answer.text == "正確"
 
 
 def test_reorder_screen_explains_backspace(tmp_path):

@@ -21,7 +21,13 @@ from .service import (
     QuizSourceDetails,
     QuizStartResult,
 )
-from .session_models import QuestionEventSnapshot, QuizSessionSummary
+from .session_models import (
+    AnswerSnapshot,
+    GeneratedQuestionSnapshot,
+    QuestionChoiceSnapshot,
+    QuestionEventSnapshot,
+    QuizSessionSummary,
+)
 from .tui_menus import (
     can_resume,
     normalized_options,
@@ -58,6 +64,48 @@ SCREEN_NAMES = frozenset(
 )
 MIN_QUESTION_COUNT = 1
 MAX_QUESTION_COUNT = 100
+_TRUTH_GLYPHS = {"true": "○", "false": "×"}
+
+
+def _is_truth_question(question: GeneratedQuestionSnapshot) -> bool:
+    return bool(
+        question.choices
+        and {choice.choice_id for choice in question.choices} == {"true", "false"}
+    )
+
+
+def _choice_display_text(
+    question: GeneratedQuestionSnapshot,
+    choice: QuestionChoiceSnapshot,
+) -> str:
+    if _is_truth_question(question):
+        return _TRUTH_GLYPHS.get(choice.choice_id, choice.text)
+    return choice.text
+
+
+def _answer_display_text(
+    question: GeneratedQuestionSnapshot,
+    answer: AnswerSnapshot,
+) -> str:
+    if _is_truth_question(question):
+        return _TRUTH_GLYPHS.get(answer.answer_id, answer.text)
+    return answer.text
+
+
+def _reorder_feedback_line(
+    label: str,
+    answer_text: str,
+    details: QuizSourceDetails | None,
+) -> str:
+    movable = f"【{answer_text}】"
+    if (
+        details is not None
+        and details.status == "available"
+        and details.source_kind == "mistake"
+        and (details.before or details.after)
+    ):
+        return f"{label}：{details.before}{movable}{details.after}"
+    return f"{label}：{movable}"
 
 
 class QuizTuiService(Protocol):
@@ -1225,16 +1273,43 @@ class QuizTuiController:
                 ):
                     markers.append("你的答案")
                 suffix = f"（{'、'.join(markers)}）" if markers else ""
-                lines.append(f"  {choice.text}{suffix}")
-        lines.extend(
-            [
-                "",
-                "你的答案："
-                + (event.user_answer.text if event.user_answer is not None else "未作答"),
-                f"正確答案：{question.correct_answer.text}",
-            ]
-        )
+                lines.append(
+                    f"  {_choice_display_text(question, choice)}{suffix}"
+                )
         details = self.state.history_question_source_details
+        if question.question_type == "mistake_reorder_4":
+            lines.append("")
+            if event.user_answer is not None:
+                lines.append(
+                    _reorder_feedback_line(
+                        "你的答案",
+                        event.user_answer.text,
+                        details,
+                    )
+                )
+            else:
+                lines.append("你的答案：未作答")
+            lines.append(
+                _reorder_feedback_line(
+                    "正解完整句",
+                    question.correct_answer.text,
+                    details,
+                )
+            )
+        else:
+            lines.extend(
+                [
+                    "",
+                    "你的答案："
+                    + (
+                        _answer_display_text(question, event.user_answer)
+                        if event.user_answer is not None
+                        else "未作答"
+                    ),
+                    "正確答案："
+                    + _answer_display_text(question, question.correct_answer),
+                ]
+            )
         if details is not None:
             lines.extend(["", "來源詳情"] )
             if details.status != "available":
@@ -1296,11 +1371,15 @@ class QuizTuiController:
                     else ""
                 )
                 marker = "●" if choice.choice_id in selected_order else "○"
+            elif _is_truth_question(question):
+                suffix = ""
+                marker = "✓" if choice.choice_id == self.state.armed_choice_id else " "
             else:
                 suffix = ""
                 marker = "●" if choice.choice_id == self.state.armed_choice_id else "○"
+            display_text = _choice_display_text(question, choice)
             row = len(lines)
-            lines.append(f"{cursor} {index + 1}. {marker} {choice.text}{suffix}")
+            lines.append(f"{cursor} {index + 1}. {marker} {display_text}{suffix}")
             targets.append((row, f"choice:{choice.choice_id}"))
         if question.question_type == "mistake_reorder_4":
             order_text = " → ".join(
@@ -1340,7 +1419,20 @@ class QuizTuiController:
         lines = [headline, ""]
         lines.extend(self._feedback_answer_lines(feedback))
         if feedback.user_answer is not None and not feedback.correct:
-            lines.append(f"你的答案：{feedback.user_answer.text}")
+            question = feedback.question.question
+            if question.question_type == "mistake_reorder_4":
+                lines.append(
+                    _reorder_feedback_line(
+                        "你的答案",
+                        feedback.user_answer.text,
+                        self.state.source_details,
+                    )
+                )
+            else:
+                lines.append(
+                    "你的答案："
+                    + _answer_display_text(question, feedback.user_answer)
+                )
         lines.extend(["", "Enter 下一題｜d 展開詳細資訊｜q 暫停/退出"])
         return self._screen(lines, width)
 
@@ -1352,10 +1444,20 @@ class QuizTuiController:
         details = self.state.source_details
         lines: list[str] = []
 
-        if question.choices and {
-            choice.choice_id for choice in question.choices
-        } == {"true", "false"}:
-            lines.append(f"正確答案：{feedback.correct_answer.text}")
+        if question.question_type == "mistake_reorder_4":
+            return [
+                _reorder_feedback_line(
+                    "正解完整句",
+                    feedback.correct_answer.text,
+                    details,
+                )
+            ]
+
+        if _is_truth_question(question):
+            lines.append(
+                "正確答案："
+                + _answer_display_text(question, feedback.correct_answer)
+            )
 
         if (
             details is not None
@@ -1375,6 +1477,8 @@ class QuizTuiController:
             if len(lines) > 1:
                 return lines
 
+        if lines:
+            return lines
         lines.append(f"正解：{feedback.correct_answer.text}")
         return lines
 
