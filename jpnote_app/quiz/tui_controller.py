@@ -11,6 +11,7 @@ import secrets
 import textwrap
 import unicodedata
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Callable, Protocol, Sequence
 
 from .question_pool import QuestionPoolPlan
@@ -53,6 +54,9 @@ SCREEN_NAMES = frozenset(
         "history_detail",
         "history_questions",
         "history_question_detail",
+        "history_export_range",
+        "history_delete_confirm",
+        "history_delete_all_confirm",
         "shortage",
         "question",
         "feedback",
@@ -120,6 +124,29 @@ class QuizTuiService(Protocol):
     def list_recent_sessions(
         self, *, limit: int = 20
     ) -> tuple[QuizSessionSummary, ...]: ...
+
+    def export_history_json(
+        self,
+        path: str | Path,
+        *,
+        session_id: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        include_abandoned: bool = True,
+    ) -> Path: ...
+
+    def delete_history_session(
+        self,
+        session_id: str,
+        *,
+        include_resumable: bool = False,
+    ) -> QuizSessionSummary: ...
+
+    def delete_all_history(
+        self,
+        *,
+        include_resumable: bool = False,
+    ) -> tuple[str, ...]: ...
 
     def decline_resume(self, session_id: str): ...
 
@@ -201,6 +228,14 @@ class QuizTuiState:
     history_question_source_details: QuizSourceDetails | None = None
     history_hide_abandoned: bool = True
     history_problem_only: bool = False
+    history_notice: str = ""
+    history_export_start_date: str = ""
+    history_export_end_date: str = ""
+    history_export_field: int = 0
+    history_export_include_abandoned: bool = True
+    history_action_return_screen: str = "history"
+    history_pending_delete_session_id: str = ""
+    history_pending_delete_include_resumable: bool = False
     choice_cursor: int = 0
     armed_choice_id: str = ""
     reorder_choice_ids: list[str] = field(default_factory=list)
@@ -235,6 +270,7 @@ class QuizTuiController:
         default_levels: Sequence[str] = (),
         default_sources: Sequence[str] = (),
         seed_factory: Callable[[], str] | None = None,
+        history_export_path_factory: Callable[[str], str | Path] | None = None,
     ) -> None:
         if default_mode not in MODE_ORDER:
             raise ValueError(f"不支援的 default_mode：{default_mode}")
@@ -277,6 +313,7 @@ class QuizTuiController:
             available_sources=available_sources,
         )
         self._seed_factory = seed_factory or (lambda: secrets.token_hex(8))
+        self._history_export_path_factory = history_export_path_factory
         self.refresh_startup()
 
     @property
@@ -301,6 +338,9 @@ class QuizTuiController:
             "history_detail": self._handle_history_detail,
             "history_questions": self._handle_history_questions,
             "history_question_detail": self._handle_history_question_detail,
+            "history_export_range": self._handle_history_export_range,
+            "history_delete_confirm": self._handle_history_delete_confirm,
+            "history_delete_all_confirm": self._handle_history_delete_all_confirm,
             "shortage": self._handle_shortage,
             "question": self._handle_question,
             "feedback": self._handle_feedback,
@@ -399,6 +439,9 @@ class QuizTuiController:
             "history_detail": self._render_history_detail,
             "history_questions": self._render_history_questions,
             "history_question_detail": self._render_history_question_detail,
+            "history_export_range": self._render_history_export_range,
+            "history_delete_confirm": self._render_history_delete_confirm,
+            "history_delete_all_confirm": self._render_history_delete_all_confirm,
             "shortage": self._render_shortage,
             "question": self._render_question,
             "feedback": self._render_feedback,
@@ -566,6 +609,20 @@ class QuizTuiController:
             self.state.history_problem_only = not self.state.history_problem_only
             self.state.history_cursor = 0
             return
+        if key == "e":
+            self._export_history(scope="all")
+            return
+        if key == "r":
+            self.state.history_export_start_date = ""
+            self.state.history_export_end_date = ""
+            self.state.history_export_field = 0
+            self.state.history_export_include_abandoned = True
+            self.state.screen = "history_export_range"
+            return
+        if key == "X":
+            self._prepare_delete_all_history()
+            return
+
         sessions = self._history_view()
         if not sessions:
             if key in {"ENTER", "SPACE", "q", "ESC"}:
@@ -579,6 +636,8 @@ class QuizTuiController:
             self._open_history_detail()
         elif key == "c":
             self._continue_history_selected()
+        elif key == "x":
+            self._prepare_delete_selected("history")
         elif key in {"q", "ESC"}:
             self.state.screen = "setup"
 
@@ -587,6 +646,10 @@ class QuizTuiController:
             self._continue_history_selected()
         elif key == "p":
             self._open_history_questions()
+        elif key == "e":
+            self._export_selected_history()
+        elif key == "x":
+            self._prepare_delete_selected("history_detail")
         elif key in {"ENTER", "SPACE", "q", "ESC", "b"}:
             self.state.screen = "history"
 
@@ -627,6 +690,60 @@ class QuizTuiController:
                 self._open_history_question_detail()
         elif key in {"ENTER", "SPACE", "q", "ESC", "b"}:
             self.state.screen = "history_questions"
+
+    def _handle_history_export_range(self, key: str) -> None:
+        if key in {"UP", "DOWN", "TAB", "\t"}:
+            self.state.history_export_field = 1 - self.state.history_export_field
+            return
+        if key == "a":
+            self.state.history_export_include_abandoned = (
+                not self.state.history_export_include_abandoned
+            )
+            return
+        if key in {"BACKSPACE", "DELETE"}:
+            if self.state.history_export_field == 0:
+                self.state.history_export_start_date = (
+                    self.state.history_export_start_date[:-1]
+                )
+            else:
+                self.state.history_export_end_date = (
+                    self.state.history_export_end_date[:-1]
+                )
+            return
+        if len(key) == 1 and (key.isdigit() or key == "-"):
+            field = (
+                "history_export_start_date"
+                if self.state.history_export_field == 0
+                else "history_export_end_date"
+            )
+            current = getattr(self.state, field)
+            if len(current) < 10:
+                setattr(self.state, field, current + key)
+            return
+        if key in {"ENTER", "SPACE"}:
+            self._export_history(
+                scope="range",
+                start_date=self.state.history_export_start_date or None,
+                end_date=self.state.history_export_end_date or None,
+                include_abandoned=self.state.history_export_include_abandoned,
+            )
+            if self.state.history_notice.startswith("已匯出"):
+                self.state.screen = "history"
+            return
+        if key in {"q", "ESC", "b"}:
+            self.state.screen = "history"
+
+    def _handle_history_delete_confirm(self, key: str) -> None:
+        if key == "y":
+            self._confirm_delete_selected()
+        elif key in {"ENTER", "SPACE", "n", "q", "ESC", "b"}:
+            self.state.screen = self.state.history_action_return_screen
+
+    def _handle_history_delete_all_confirm(self, key: str) -> None:
+        if key == "y":
+            self._confirm_delete_all_history()
+        elif key in {"ENTER", "SPACE", "n", "q", "ESC", "b"}:
+            self.state.screen = "history"
 
     def _handle_shortage(self, key: str) -> None:
         if key in {"ENTER", "SPACE", "y"}:
@@ -796,7 +913,9 @@ class QuizTuiController:
             )
         return sessions
 
-    def _open_history(self) -> None:
+    def _open_history(self, *, preserve_notice: bool = False) -> None:
+        if not preserve_notice:
+            self.state.history_notice = ""
         loader = getattr(self.service, "list_recent_sessions", None)
         if not callable(loader):
             self.state.history_sessions = ()
@@ -871,11 +990,98 @@ class QuizTuiController:
             )
         self.state.screen = "history_question_detail"
 
-    def _continue_history_selected(self) -> None:
+    def _selected_history_summary(self) -> QuizSessionSummary | None:
         sessions = self._history_view()
         if not sessions:
+            return None
+        self.state.history_cursor = min(self.state.history_cursor, len(sessions) - 1)
+        return sessions[self.state.history_cursor]
+
+    def _history_export_destination(self, scope: str) -> Path:
+        if self._history_export_path_factory is None:
+            raise QuizServiceError("目前 TUI 未設定 Quiz history 匯出路徑")
+        return Path(self._history_export_path_factory(scope)).expanduser()
+
+    def _export_history(
+        self,
+        *,
+        scope: str,
+        session_id: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        include_abandoned: bool = True,
+    ) -> None:
+        try:
+            destination = self._history_export_destination(scope)
+            written = self.service.export_history_json(
+                destination,
+                session_id=session_id,
+                start_date=start_date,
+                end_date=end_date,
+                include_abandoned=include_abandoned,
+            )
+        except Exception as exc:
+            self.state.history_notice = f"匯出失敗：{exc}"
             return
-        summary = sessions[self.state.history_cursor]
+        self.state.history_notice = f"已匯出 Quiz history：{written}"
+
+    def _export_selected_history(self) -> None:
+        summary = self._selected_history_summary()
+        if summary is None:
+            self.state.history_notice = "目前沒有可匯出的 Quiz session。"
+            return
+        self._export_history(scope="session", session_id=summary.session_id)
+
+    def _prepare_delete_selected(self, return_screen: str) -> None:
+        summary = self._selected_history_summary()
+        if summary is None:
+            self.state.history_notice = "目前沒有可刪除的 Quiz session。"
+            return
+        self.state.history_action_return_screen = return_screen
+        self.state.history_pending_delete_session_id = summary.session_id
+        self.state.history_pending_delete_include_resumable = can_resume(summary)
+        self.state.screen = "history_delete_confirm"
+
+    def _prepare_delete_all_history(self) -> None:
+        if not self.state.history_sessions:
+            self.state.history_notice = "目前沒有 Quiz history 可清除。"
+            return
+        self.state.screen = "history_delete_all_confirm"
+
+    def _confirm_delete_selected(self) -> None:
+        session_id = self.state.history_pending_delete_session_id
+        if not session_id:
+            self.state.history_notice = "沒有待刪除的 Quiz session。"
+            self.state.screen = "history"
+            return
+        try:
+            deleted = self.service.delete_history_session(
+                session_id,
+                include_resumable=self.state.history_pending_delete_include_resumable,
+            )
+        except Exception as exc:
+            self.state.history_notice = f"刪除失敗：{exc}"
+            self.state.screen = self.state.history_action_return_screen
+            return
+        self.state.history_pending_delete_session_id = ""
+        self.state.history_pending_delete_include_resumable = False
+        self._open_history(preserve_notice=True)
+        self.state.history_notice = f"已刪除 Quiz session：{deleted.session_id}"
+
+    def _confirm_delete_all_history(self) -> None:
+        try:
+            deleted = self.service.delete_all_history(include_resumable=True)
+        except Exception as exc:
+            self.state.history_notice = f"清除失敗：{exc}"
+            self.state.screen = "history"
+            return
+        self._open_history(preserve_notice=True)
+        self.state.history_notice = f"已清除 {len(deleted)} 場 Quiz history。"
+
+    def _continue_history_selected(self) -> None:
+        summary = self._selected_history_summary()
+        if summary is None:
+            return
         if not can_resume(summary):
             self.state.message = "所選 session 已結束，無法繼續。"
             self.state.screen = "message"
@@ -1132,15 +1338,18 @@ class QuizTuiController:
         lines = [
             "Quiz 歷史紀錄",
             f"篩選：{problem_label}｜abandoned：{abandoned_label}",
-            "",
         ]
+        if self.state.history_notice:
+            lines.append(self.state.history_notice)
+        lines.append("")
         targets: list[tuple[int, str]] = []
         if not sessions:
             lines.extend(
                 [
                     "目前篩選下沒有 Quiz 紀錄。",
                     "",
-                    "w 切換答錯/跳過｜a 顯示/隱藏 abandoned｜Enter/q 返回",
+                    "e 匯出全部｜r 日期範圍匯出｜X 清除全部｜Enter/q 返回",
+                    "w 切換答錯/跳過｜a 顯示/隱藏 abandoned",
                 ]
             )
             return self._screen(lines, width)
@@ -1161,6 +1370,7 @@ class QuizTuiController:
             [
                 "",
                 "↑/↓ 移動｜Enter 詳細｜c 繼續未完成測驗｜q 返回",
+                "e 匯出全部｜r 日期範圍｜x 刪除所選｜X 清除全部",
                 "w 切換答錯/跳過｜a 顯示/隱藏 abandoned",
             ]
         )
@@ -1172,6 +1382,11 @@ class QuizTuiController:
         summary = result.summary
         lines = [
             "Quiz 紀錄詳細資訊",
+        ]
+        if self.state.history_notice:
+            lines.append(self.state.history_notice)
+        lines.extend(
+            [
             "",
             f"時間：{summary.started_at[:19].replace('T', ' ')}",
             f"模式：{summary.mode}",
@@ -1181,7 +1396,8 @@ class QuizTuiController:
             f"答錯：{summary.incorrect_count}",
             f"跳過：{summary.skipped_count}",
             f"正確率：{summary.accuracy * 100:.1f}%",
-        ]
+            ]
+        )
         if summary.details_pruned:
             lines.append("逐題詳細資料：已依 retention 規則清理")
         if result.question_types:
@@ -1197,8 +1413,73 @@ class QuizTuiController:
             lines.extend(["", "逐題紀錄已清理，只保留本頁摘要"] )
         if can_resume(summary):
             lines.extend(["", "c 繼續這場測驗"] )
-        lines.extend(["", "Enter/q 返回歷史紀錄"] )
+        lines.extend(
+            [
+                "",
+                "e 匯出這場｜x 永久刪除這場｜Enter/q 返回歷史紀錄",
+            ]
+        )
         return self._screen(lines, width)
+
+    def _render_history_export_range(self, width: int) -> RenderedScreen:
+        start_marker = "▶" if self.state.history_export_field == 0 else " "
+        end_marker = "▶" if self.state.history_export_field == 1 else " "
+        abandoned = (
+            "包含 abandoned"
+            if self.state.history_export_include_abandoned
+            else "排除 abandoned"
+        )
+        lines = [
+            "Quiz history 日期範圍匯出",
+            "",
+            f"{start_marker} 起始日期：{self.state.history_export_start_date or '（不限）'}",
+            f"{end_marker} 結束日期：{self.state.history_export_end_date or '（不限）'}",
+            f"abandoned：{abandoned}",
+        ]
+        if self.state.history_notice.startswith("匯出失敗"):
+            lines.extend(["", self.state.history_notice])
+        lines.extend(
+            [
+                "",
+                "輸入 YYYY-MM-DD；留空代表不限",
+                "↑/↓ 切換欄位｜Backspace 刪除｜a 切換 abandoned",
+                "Enter 匯出｜q 返回",
+            ]
+        )
+        return self._screen(lines, width)
+
+    def _render_history_delete_confirm(self, width: int) -> RenderedScreen:
+        session_id = self.state.history_pending_delete_session_id
+        resumable = self.state.history_pending_delete_include_resumable
+        warning = (
+            "此 session 仍可恢復；刪除後無法繼續。"
+            if resumable
+            else "此操作會永久刪除該場摘要與尚未清理的逐題紀錄。"
+        )
+        return self._screen(
+            [
+                "確認刪除 Quiz session",
+                "",
+                f"session：{session_id}",
+                warning,
+                "",
+                "y 確認永久刪除｜Enter/n/q 取消",
+            ],
+            width,
+        )
+
+    def _render_history_delete_all_confirm(self, width: int) -> RenderedScreen:
+        return self._screen(
+            [
+                "確認清除全部 Quiz history",
+                "",
+                "這會刪除 completed、abandoned，以及仍可恢復的 active/paused/interrupted session。",
+                "此操作不可復原。",
+                "",
+                "y 確認全部清除｜Enter/n/q 取消",
+            ],
+            width,
+        )
 
     def _render_history_questions(self, width: int) -> RenderedScreen:
         result = self.state.history_result

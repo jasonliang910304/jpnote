@@ -10,6 +10,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable, Iterator, Sequence
 
 from jpnote_app.study_sources import (
@@ -210,6 +211,49 @@ class QuizService:
         """Return recent Quiz summaries for the TUI history browser."""
 
         return self._session_store.list_recent_sessions(limit=limit)
+
+    def export_history_json(
+        self,
+        path: str | Path,
+        *,
+        session_id: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        include_abandoned: bool = True,
+    ) -> Path:
+        """Write one stable Quiz-history JSON export through the store contract."""
+
+        return self._session_store.write_history_json(
+            path,
+            session_id=session_id,
+            start_date=start_date,
+            end_date=end_date,
+            include_abandoned=include_abandoned,
+        )
+
+    def delete_history_session(
+        self,
+        session_id: str,
+        *,
+        include_resumable: bool = False,
+    ) -> QuizSessionSummary:
+        """Delete one Quiz history session through the protected store API."""
+
+        return self._session_store.delete_session(
+            session_id,
+            include_resumable=include_resumable,
+        )
+
+    def delete_all_history(
+        self,
+        *,
+        include_resumable: bool = False,
+    ) -> tuple[str, ...]:
+        """Delete terminal history, or all history only when explicitly allowed."""
+
+        return self._session_store.delete_all_history(
+            include_resumable=include_resumable
+        )
 
     def plan_session(
         self,

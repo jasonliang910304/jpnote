@@ -109,7 +109,7 @@ jpnote --version
 
 ## 下一個正確工作項目
 
-Deep Adversarial Audit、v0.7.4 correctness/safety 與 v0.7.5.x releases 都已完成；既有 release tag 不得修改或移動。v0.7.6 dev1–dev3 已 commit/push 且對應 Core CI 綠；目前 dev4 修正共用 terminal section hanging-indent wrapping：numbered meanings、numbered examples、indented translations/notes 的 continuation 必須保留與 prefix 對齊的縮排，不做 grammar-only workaround。下一個主要 correctness/UI backlog 是 Quiz history export/delete 與剩餘一般 UX，不重做已完成的廣域 audit。
+Deep Adversarial Audit、v0.7.4 correctness/safety 與 v0.7.5.x releases 都已完成；既有 release tag 不得修改或移動。v0.7.6 dev1–dev4 已 commit/push 且對應 Core CI 綠；目前 dev5 為 Quiz history management TUI：重用既有 store export/delete contracts，Service 提供正式 wrapper，TUI 支援 all/single/date-range export、abandoned toggle、single/all destructive delete confirmation，resumable 只有明確確認才可刪；export destination 由 adapter 放到 app export tree。尚餘 interrupted export toggle 與一般 history polish，不重做已完成的廣域 audit。
 
 後續固定排程：
 

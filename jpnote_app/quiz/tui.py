@@ -11,10 +11,13 @@ import curses
 import locale
 import sys
 from collections.abc import Sequence
+from datetime import datetime
+from pathlib import Path
 from queue import Empty, Queue
 from threading import Thread
 from typing import Any
 
+from jpnote_app.config import export_dir
 from jpnote_app.study_sources import StudySourceService
 
 from .service import (
@@ -30,6 +33,16 @@ from .tui_controller import QuizTuiController, RenderedScreen
 
 def _service() -> QuizService:
     return QuizService(StudySourceService.from_default_core(), QuizSessionStore())
+
+
+def _history_export_path(scope: str) -> Path:
+    safe_scope = scope if scope in {"all", "session", "range"} else "history"
+    stamp = datetime.now().astimezone().strftime("%Y%m%dT%H%M%S%f")
+    return (
+        export_dir()
+        / "quiz-history"
+        / f"jpnote-quiz-history-{safe_scope}-{stamp}.json"
+    )
 
 
 def _normalize_key(value: object) -> str:
@@ -289,6 +302,7 @@ def run(
         default_count=default_count,
         default_levels=default_levels,
         default_sources=default_sources,
+        history_export_path_factory=_history_export_path,
     )
     try:
         return curses.wrapper(

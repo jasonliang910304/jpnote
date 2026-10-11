@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 
 from jpnote_app.quiz.service import QuizSessionResult
@@ -48,6 +49,9 @@ class FakeService:
             ),
         )
         self.continued: list[str] = []
+        self.exports: list[dict[str, object]] = []
+        self.deleted: list[tuple[str, bool]] = []
+        self.delete_all_calls: list[bool] = []
 
     def source_catalog(self):
         return SimpleNamespace(
@@ -60,6 +64,39 @@ class FakeService:
 
     def list_recent_sessions(self, *, limit: int = 20):
         return self.recent[:limit]
+
+    def export_history_json(
+        self,
+        path,
+        *,
+        session_id=None,
+        start_date=None,
+        end_date=None,
+        include_abandoned=True,
+    ):
+        call = {
+            "path": Path(path),
+            "session_id": session_id,
+            "start_date": start_date,
+            "end_date": end_date,
+            "include_abandoned": include_abandoned,
+        }
+        self.exports.append(call)
+        return Path(path)
+
+    def delete_history_session(self, session_id: str, *, include_resumable=False):
+        item = next(value for value in self.recent if value.session_id == session_id)
+        self.deleted.append((session_id, include_resumable))
+        self.recent = tuple(
+            value for value in self.recent if value.session_id != session_id
+        )
+        return item
+
+    def delete_all_history(self, *, include_resumable=False):
+        self.delete_all_calls.append(include_resumable)
+        ids = tuple(value.session_id for value in self.recent)
+        self.recent = ()
+        return ids
 
     def session_result(self, session_id: str):
         item = next(value for value in self.recent if value.session_id == session_id)
@@ -97,7 +134,13 @@ class FakeService:
 
 
 def controller() -> QuizTuiController:
-    return QuizTuiController(FakeService(), seed_factory=lambda: "seed")
+    return QuizTuiController(
+        FakeService(),
+        seed_factory=lambda: "seed",
+        history_export_path_factory=lambda scope: Path(
+            f"/tmp/jpnote-quiz-history-{scope}.json"
+        ),
+    )
 
 
 def test_menu_helpers_preserve_stable_level_order_and_toggle():
@@ -255,3 +298,164 @@ def test_quiz_service_exposes_catalog_and_recent_history_without_tui_dependency(
     service = QuizService(Reader(), Store())
     assert service.source_catalog().levels == ("N3",)
     assert service.list_recent_sessions(limit=1)[0].session_id == "quiz-session:one"
+
+def test_history_export_all_and_selected_session_use_service_boundary():
+    ui = controller()
+    service = ui.service
+    ui.handle_key("H")
+
+    ui.handle_key("e")
+    assert service.exports[-1]["session_id"] is None
+    assert service.exports[-1]["path"].name == "jpnote-quiz-history-all.json"
+    assert "已匯出" in ui.state.history_notice
+
+    ui.handle_key("ENTER")
+    assert ui.state.screen == "history_detail"
+    ui.handle_key("e")
+    assert service.exports[-1]["session_id"] == "quiz-session:completed"
+    assert service.exports[-1]["path"].name == "jpnote-quiz-history-session.json"
+
+
+def test_history_date_range_export_collects_dates_and_abandoned_toggle():
+    ui = controller()
+    service = ui.service
+    ui.handle_key("H")
+    ui.handle_key("r")
+    assert ui.state.screen == "history_export_range"
+
+    for char in "2026-07-20":
+        ui.handle_key(char)
+    ui.handle_key("DOWN")
+    for char in "2026-07-24":
+        ui.handle_key(char)
+    ui.handle_key("a")
+    ui.handle_key("ENTER")
+
+    assert ui.state.screen == "history"
+    call = service.exports[-1]
+    assert call["start_date"] == "2026-07-20"
+    assert call["end_date"] == "2026-07-24"
+    assert call["include_abandoned"] is False
+    assert call["path"].name == "jpnote-quiz-history-range.json"
+
+
+def test_history_single_delete_requires_explicit_y_and_protects_cancel():
+    ui = controller()
+    service = ui.service
+    ui.handle_key("H")
+    ui.handle_key("x")
+    assert ui.state.screen == "history_delete_confirm"
+    ui.handle_key("ENTER")
+    assert ui.state.screen == "history"
+    assert service.deleted == []
+
+    ui.handle_key("x")
+    ui.handle_key("y")
+    assert service.deleted == [("quiz-session:completed", False)]
+    assert all(
+        item.session_id != "quiz-session:completed"
+        for item in ui.state.history_sessions
+    )
+    assert "已刪除" in ui.state.history_notice
+
+
+def test_history_resumable_delete_requires_explicit_resumable_permission():
+    ui = controller()
+    service = ui.service
+    ui.handle_key("H")
+    ui.state.history_cursor = 1
+    ui.handle_key("x")
+    assert ui.state.history_pending_delete_include_resumable is True
+    rendered = "\n".join(ui.render(100, 30).lines)
+    assert "仍可恢復" in rendered
+    ui.handle_key("y")
+    assert service.deleted == [("quiz-session:paused", True)]
+
+
+def test_history_delete_all_is_uppercase_and_explicitly_confirmed():
+    ui = controller()
+    service = ui.service
+    ui.handle_key("H")
+    ui.handle_key("X")
+    assert ui.state.screen == "history_delete_all_confirm"
+    ui.handle_key("n")
+    assert service.delete_all_calls == []
+
+    ui.handle_key("X")
+    ui.handle_key("y")
+    assert service.delete_all_calls == [True]
+    assert ui.state.history_sessions == ()
+    assert "已清除 2 場" in ui.state.history_notice
+
+
+def test_quiz_service_wraps_store_history_management_methods():
+    from jpnote_app.quiz.service import QuizService
+    from jpnote_app.study_sources import SourceCatalog
+
+    class Reader:
+        def list_entry_snapshots(self, **kwargs):
+            return ()
+
+        def get_entry_snapshot(self, key):
+            return None
+
+        def list_attempt_replay_sources(self, **kwargs):
+            return ()
+
+        def get_attempt_replay_source(self, event_key):
+            return None
+
+        def source_catalog(self):
+            return SourceCatalog(0, 0, (), ())
+
+    class Store:
+        def __init__(self):
+            self.calls = []
+
+        def write_history_json(self, path, **kwargs):
+            self.calls.append(("export", Path(path), kwargs))
+            return Path(path)
+
+        def delete_session(self, session_id, **kwargs):
+            self.calls.append(("delete", session_id, kwargs))
+            return summary(session_id)
+
+        def delete_all_history(self, **kwargs):
+            self.calls.append(("delete_all", kwargs))
+            return ("quiz-session:one",)
+
+    store = Store()
+    service = QuizService(Reader(), store)
+    path = service.export_history_json(
+        "/tmp/history.json",
+        start_date="2026-07-20",
+        end_date="2026-07-24",
+        include_abandoned=False,
+    )
+    assert path == Path("/tmp/history.json")
+    deleted = service.delete_history_session(
+        "quiz-session:one",
+        include_resumable=True,
+    )
+    assert deleted.session_id == "quiz-session:one"
+    assert service.delete_all_history(include_resumable=True) == (
+        "quiz-session:one",
+    )
+    assert store.calls == [
+        (
+            "export",
+            Path("/tmp/history.json"),
+            {
+                "session_id": None,
+                "start_date": "2026-07-20",
+                "end_date": "2026-07-24",
+                "include_abandoned": False,
+            },
+        ),
+        (
+            "delete",
+            "quiz-session:one",
+            {"include_resumable": True},
+        ),
+        ("delete_all", {"include_resumable": True}),
+    ]

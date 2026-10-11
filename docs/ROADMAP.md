@@ -3,7 +3,7 @@
 最後更新：2026-10-12（Asia/Taipei）
 正式 release/tag：v0.7.5.3；annotated tag object `982fe761f1148196838cfc1b4a669d36f8baf438` 固定指向 release commit `8e4e17d6c48c0f3e31e9ad00bc42f618b542ecae`
 正式安裝版本：0.7.5.3
-目前開發位置：v0.7.6 correctness/UI dev4，exact parent=`c0dedf17f3319125899640e7eef2e6abf95fd5fa`。dev1–dev3 已 commit/push 且對應 Core CI 綠；dev4 將 grammar/detail numbered paragraph 與例句／note 的長段落換行統一收斂到共用 hanging-indent renderer：number prefix 依 terminal cell width 對齊，既有 leading indent 在續行保持一致。core schema v5、Quiz schema v2、public import schema不變；沒有 DB login/auth/permission/migration 變更。
+目前開發位置：v0.7.6 correctness/UI dev5，exact parent=`af468a478a70191dcd275ee3c5f714d8538fa80d`。dev1–dev4 已 commit/push 且對應 Core CI 綠；dev5 為 Quiz history management TUI：透過正式 QuizService wrapper 重用既有 atomic/private JSON export 與 protected delete APIs，加入 all/single/date-range export、single/all delete 與 explicit confirmation。日期範圍可切換 abandoned；interrupted export toggle 仍保留為後續小型 polish。core schema v5、Quiz schema v2、public import schema不變；沒有 DB login/auth/permission/migration 變更。
 
 ## 0.7.2 高優先主軸 — completed
 
@@ -143,7 +143,7 @@ v0.7.5.x runtime scope 已收斂；下一個 runtime checkpoint 直接進 v0.7.6
 - 保留並強化現有 kana-prompt homophone guard；基本同音詞安全已存在，不再當作「從零實作」項目。
 - Quiz 讀音題 eligibility guard（dev1 v2 implemented）：實際 vocabulary `display` 若只有平假名／片假名／長音／符號而不含漢字，不產生 reading true/false/trap 題；即使只有漢字 alias，也不拿 alias 偷換 prompt。未來若要支援 alias prompt 必須另有明確安全規則。
 - Import pre-commit prompt interruption（dev1 v2 implemented）：duplicate warning 選擇、安全修正確認與最終正式匯入確認遇 Ctrl+C/EOF 時顯示「已取消，未修改資料庫」並正常返回；不吞掉已進 mutation／commit 後的 KeyboardInterrupt。
-- Quiz history export/delete TUI 入口與 history polish。
+- Quiz history export/delete TUI 入口與 history polish（dev5 implemented candidate）：all/single/date-range JSON export、abandoned include/exclude、single/all delete、resumable protection＋explicit `y` confirmation；尚餘 interrupted export toggle 與小型 UX polish。
 - grammar 詳細頁 numbered paragraph hanging indent／長段落 wrapping（dev4 implemented candidate）：共用 `_section()` renderer 依 number/leading-indent 的 terminal cell width 保留續行縮排；同時覆蓋「意思／用法」、例句日中內容與相關文法 note，避免編號孤立或續行回到最左側。
 - fzf 未分類／mistake level 空值等一般 UX，以及 fuzzy duplicate candidate／確認流程。
 

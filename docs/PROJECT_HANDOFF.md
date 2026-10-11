@@ -3,7 +3,7 @@
 最後更新：2026-10-12（Asia/Taipei）
 正式 release/tag：`jpnote v0.7.5.3`；annotated tag object `982fe761f1148196838cfc1b4a669d36f8baf438` 固定指向 release commit `8e4e17d6c48c0f3e31e9ad00bc42f618b542ecae`
 正式安裝版本：`jpnote 0.7.5.3`
-目前開發 checkpoint：v0.7.6 correctness/UI dev4，exact parent=`c0dedf17f3319125899640e7eef2e6abf95fd5fa`（dev3 commit；Core regression #60 Python 3.10/3.13 全綠，Windows import client 因 path filter 未觸發）。dev4 修正共用 terminal presentation section wrapping：numbered row 依實際 prefix cell width 使用 hanging indent；原本已有 leading indentation 的行在所有 continuation line 保持相同縮排。因此 grammar「意思／用法」、多例句日文／中文與相關文法 note 等共用 `_section()` 的長內容一致修正，不做單畫面特判。core schema v5、Quiz schema v2、public import schema 不變；沒有 DB login/auth/permission/migration 變更。AI 不修改 GitHub 遠端。
+目前開發 checkpoint：v0.7.6 correctness/UI dev5，exact parent=`af468a478a70191dcd275ee3c5f714d8538fa80d`（dev4 commit；Core regression #61 Python 3.10/3.13 全綠，Windows import client 因 path filter 未觸發）。dev5 將既有 QuizSessionStore history export/delete 能力正式暴露到 QuizService 與 TUI：history list `e` 匯出全部、detail `e` 匯出單場、`r` 日期範圍 JSON（可切換 abandoned）、`x` 刪所選、`X` 清全部；destructive action 僅 `y` 明確確認後執行，resumable session 只有在 TUI 已確認後才傳 `include_resumable=True`。export path policy 由 curses adapter 使用既有 app export tree 產生，controller 不直接依賴 HOME/config/filesystem。core schema v5、Quiz schema v2、public import schema 不變；沒有 DB login/auth/permission/migration 變更。AI 不修改 GitHub 遠端。
 
 用途：讓新的 ChatGPT 對話或新的開發工作階段，不依賴舊聊天內容也能直接接續工作。
 

@@ -315,6 +315,8 @@ Snapshot 用途：
 - 只看答錯／跳過
 - abandoned session 顯示明確狀態
 - 可用 filter 隱藏 abandoned sessions
+- TUI 可匯出全部 history、單一 session、或日期範圍 JSON
+- TUI 可永久刪除單一 session 或清除全部 Quiz history；所有 destructive action 必須先明確確認
 
 ### 手動刪除
 
@@ -369,6 +371,8 @@ Session summary 永久保留：
 - abandoned
 
 提供選項排除 interrupted／abandoned。
+
+目前 v0.7.6 TUI management slice 已提供 abandoned include/exclude toggle；interrupted 仍包含在日期／全部 export，後續若加入 interrupted toggle 必須沿用既有 export contract，不得偷偷改寫歷史內容。
 
 匯出內容：
 

@@ -9,7 +9,7 @@ from contextlib import redirect_stderr
 from io import StringIO
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import ANY, Mock, patch
 
 from jpnote_app import cli
 from jpnote_app.optional_features import load_quiz_tui
@@ -226,6 +226,7 @@ class QuizCliConfigTests(unittest.TestCase):
             default_count=8,
             default_levels=("N3",),
             default_sources=("book",),
+            history_export_path_factory=ANY,
         )
         store.prune_details.assert_called_once_with(cap_bytes=1234)
 
