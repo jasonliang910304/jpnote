@@ -5,7 +5,7 @@ import json
 import os
 import tempfile
 import unittest
-from contextlib import redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
 from types import SimpleNamespace
@@ -78,6 +78,33 @@ class QuizCliConfigTests(unittest.TestCase):
         self.assertFalse(loaded["transparent_background"])
         self.assertEqual(loaded["history_detail_cap_mib"], 64)
         self.assertFalse(loaded["prune_after_session"])
+
+
+    def test_config_show_localizes_unclassified_levels(self) -> None:
+        config = validate_preferences(
+            {
+                "browse": {
+                    **DEFAULT_CONFIG["browse"],
+                    "levels": ["unclassified"],
+                },
+                "quiz": {
+                    **DEFAULT_CONFIG["quiz"],
+                    "levels": ["unclassified"],
+                },
+            }
+        )
+        write_preferences(config)
+
+        output = StringIO()
+        with redirect_stdout(output):
+            self.assertEqual(
+                cli.command_config_show(argparse.Namespace(format="text")),
+                0,
+            )
+        rendered = output.getvalue()
+        self.assertIn("預設等級：未分類", rendered)
+        self.assertIn("Quiz 預設等級：未分類", rendered)
+        self.assertNotIn("unclassified", rendered)
 
     def test_invalid_quiz_preferences_fail_closed(self) -> None:
         for field, value in (

@@ -19,7 +19,13 @@ from typing import Any
 from . import ui_fzf
 from .attempt_services import delete_attempt_data, replace_attempt_data
 from .attempt_options import safe_option_migration_candidates, apply_safe_option_migrations, suspicious_option_migration_candidates
-from .browsing import DEFAULT_TYPES, TYPE_LABELS, browse_json, browse_records
+from .browsing import (
+    DEFAULT_TYPES,
+    TYPE_LABELS,
+    browse_json,
+    browse_records,
+    level_display_label,
+)
 from .audit import apply_safe_repairs, run_audit
 from .config import BACKUP_MAX_BYTES, VERSION, backup_dir, db_path, export_dir
 from .preferences import (
@@ -757,13 +763,15 @@ def command_config_show(args: argparse.Namespace) -> int:
         print(f"設定檔：{preferences_path()}")
         type_text = '、'.join(TYPE_LABELS[value] for value in browse['types']) or '全部'
         print(f"預設類型：{type_text}")
-        print(f"預設等級：{'、'.join(browse['levels']) or '全部'}")
+        browse_levels = "、".join(level_display_label(value) for value in browse["levels"])
+        print(f"預設等級：{browse_levels or '全部'}")
         results = browse["results"]
         print(f"預設錯題結果：{'、'.join(results) or '全部'}")
         quiz = config["quiz"]
         print("Quiz 預設模式：" + quiz["mode"])
         print(f"Quiz 預設題數：{quiz['count']}")
-        print(f"Quiz 預設等級：{'、'.join(quiz['levels']) or '全部'}")
+        quiz_levels = "、".join(level_display_label(value) for value in quiz["levels"])
+        print(f"Quiz 預設等級：{quiz_levels or '全部'}")
         print(f"Quiz 預設來源：{'、'.join(quiz['sources']) or '全部'}")
         print(
             "Quiz 透明背景："

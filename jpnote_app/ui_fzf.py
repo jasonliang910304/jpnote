@@ -15,7 +15,13 @@ import tempfile
 from pathlib import Path
 from typing import Any, Iterable
 
-from .browsing import DEFAULT_TYPES, LEVEL_VALUES, RESULT_VALUES, TYPE_LABELS
+from .browsing import (
+    DEFAULT_TYPES,
+    LEVEL_VALUES,
+    RESULT_VALUES,
+    TYPE_LABELS,
+    level_display_label,
+)
 from .fzf_filter_helper import SHORTCUT_TOKENS, read_state, render_panel, summary as _panel_summary, write_state
 from .fzf_search_helper import (
     append_search_index,
@@ -288,8 +294,9 @@ def select_entry(entries: list[dict[str, Any]], prompt: str) -> str | None:
         detail_values = []
         if entry.get("reading"):
             detail_values.append(entry["reading"])
-        if entry.get("level"):
-            detail_values.append(style(entry["level"], "bold", "yellow"))
+        detail_values.append(
+            style(level_display_label(entry.get("level", "")), "bold", "yellow")
+        )
         details = "／".join(detail_values)
         visible = (
             f"{tone(f'[{label}]', _type_tone(entry['type']), bold=True)} "
@@ -346,8 +353,9 @@ def select_recent(entries: list[dict[str, Any]], prompt: str = "選擇近期變�
         detail_values = []
         if entry.get("reading"):
             detail_values.append(entry["reading"])
-        if entry.get("level"):
-            detail_values.append(style(entry["level"], "bold", "yellow"))
+        detail_values.append(
+            style(level_display_label(entry.get("level", "")), "bold", "yellow")
+        )
         details = "／".join(detail_values)
         sources = entry.get("recent_sources") or entry.get("sources") or []
         source_text = "、".join(sources[-2:])
@@ -389,8 +397,9 @@ def _browse_visible(record: dict[str, Any]) -> str:
         detail_values = []
         if entry.get("reading"):
             detail_values.append(entry["reading"])
-        if entry.get("level"):
-            detail_values.append(style(entry["level"], "bold", "yellow"))
+        detail_values.append(
+            style(level_display_label(entry.get("level", "")), "bold", "yellow")
+        )
         details = "／".join(detail_values)
         return (
             f"{tone(f'[{label}]', _type_tone(entry['type']), bold=True)} "
@@ -404,7 +413,10 @@ def _browse_visible(record: dict[str, Any]) -> str:
         value for value in (attempt.get("source", ""), attempt.get("question", "")) if value
     )
     raw_levels = record.get("levels", [])
-    levels = "、".join(level or "未分類" for level in raw_levels) or "未分類"
+    levels = (
+        "、".join(level_display_label(level) for level in raw_levels)
+        or level_display_label("")
+    )
     return (
         f"{tone('[錯題]', 'red', bold=True)} "
         f"{tone(f'[{result}]', _result_tone(result), bold=True)} "

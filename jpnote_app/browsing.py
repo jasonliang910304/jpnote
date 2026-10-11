@@ -29,6 +29,11 @@ def normalize_level_filter(value: str) -> str:
     return text.upper()
 
 
+def level_display_label(value: str) -> str:
+    """Return the human-readable JLPT label used by terminal UI surfaces."""
+    return normalize_level_filter(value) or "未分類"
+
+
 def _entry_kind(entry_type: str) -> str:
     return "grammar" if entry_type == "grammar" else "vocab"
 

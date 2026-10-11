@@ -109,7 +109,7 @@ jpnote --version
 
 ## 下一個正確工作項目
 
-Deep Adversarial Audit、v0.7.4 correctness/safety 與 v0.7.5.x releases 都已完成；既有 release tag 不得修改或移動。v0.7.6 dev1–dev4 已 commit/push 且對應 Core CI 綠；目前 dev5 為 Quiz history management TUI：重用既有 store export/delete contracts，Service 提供正式 wrapper，TUI 支援 all/single/date-range export、abandoned toggle、single/all destructive delete confirmation，resumable 只有明確確認才可刪；export destination 由 adapter 放到 app export tree。尚餘 interrupted export toggle 與一般 history polish，不重做已完成的廣域 audit。
+Deep Adversarial Audit、v0.7.4 correctness/safety 與 v0.7.5.x releases 都已完成；既有 release tag 不得修改或移動。v0.7.6 dev1–dev5 已 commit/push 且對應 Core CI 綠；目前 dev6 收斂 unclassified/mistake-level terminal UX：共用 human-readable level label，fzf entry rows 的未分類項目必須明確顯示「未分類」，mixed mistake level 不得出現 `N4、` 空尾巴，filter summary/config show 同步本地化；filter panel 說明未分類使用游標＋Space。下一個主要 correctness 項目是 fuzzy duplicate candidate／確認流程；history interrupted export toggle 是後續小型 polish，不重做已完成的廣域 audit。
 
 後續固定排程：
 

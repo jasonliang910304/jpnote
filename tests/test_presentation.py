@@ -254,6 +254,46 @@ class PresentationTests(unittest.TestCase):
         self.assertTrue(any("+reload(" in arg for arg in command))
         self.assertTrue(any(arg.startswith("--bind=1:") for arg in command))
         self.assertTrue(any(arg.startswith("--bind=0:") for arg in command))
+        self.assertIn("未分類：游標＋Space", run.call_args.kwargs["input"])
+
+
+    def test_unclassified_filter_summary_uses_human_label(self) -> None:
+        summary = ui_fzf.browse_filter_summary({
+            "types": {"grammar", "vocab"},
+            "levels": {"unclassified"},
+            "results": set(),
+        })
+        self.assertIn("等級＝未分類", summary)
+        self.assertNotIn("unclassified", summary)
+
+    def test_browse_entry_with_empty_level_displays_unclassified(self) -> None:
+        visible = ui_fzf._browse_visible({
+            "record_type": "entry",
+            "kind": "vocab",
+            "data": {
+                "type": "vocabulary",
+                "display": "語彙",
+                "reading": "ごい",
+                "level": "",
+            },
+        })
+        self.assertIn("未分類", visible)
+
+    def test_mistake_mixed_levels_never_renders_blank_tail(self) -> None:
+        visible = ui_fzf._browse_visible({
+            "record_type": "attempt",
+            "kind": "mistake",
+            "levels": ["N4", ""],
+            "data": {
+                "event_key": "attempt:mixed-levels",
+                "result": "wrong",
+                "date": "2026-10-12",
+                "source": "test",
+                "question": "q1",
+            },
+        })
+        self.assertIn("N4、未分類", visible)
+        self.assertFalse(visible.rstrip().endswith("N4、"))
 
     def test_empty_mistake_results_are_summarized_as_all(self) -> None:
         summary = ui_fzf.browse_filter_summary({

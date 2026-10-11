@@ -12,7 +12,14 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .browsing import ALL_TYPES, DEFAULT_TYPES, LEVEL_VALUES, RESULT_VALUES, TYPE_LABELS
+from .browsing import (
+    ALL_TYPES,
+    DEFAULT_TYPES,
+    LEVEL_VALUES,
+    RESULT_VALUES,
+    TYPE_LABELS,
+    level_display_label,
+)
 
 OPTIONS: tuple[tuple[str, str, str, str], ...] = (
     ("types", "grammar", "類型", "文法"),
@@ -79,7 +86,7 @@ def summary(state: dict[str, set[str]]) -> str:
         TYPE_LABELS[value] for value in ALL_TYPES if value in state["types"]
     ) or "全部"
     levels = [value for value in LEVEL_VALUES if value in state["levels"]]
-    level_text = "、".join("未分類" if value == "unclassified" else value for value in levels) or "全部"
+    level_text = "、".join(level_display_label(value) for value in levels) or "全部"
     parts = [f"類型＝{type_text}", f"等級＝{level_text}"]
     if "mistake" in state["types"]:
         chosen = [value for value in RESULT_VALUES if value in state["results"]]
@@ -91,7 +98,7 @@ def summary(state: dict[str, set[str]]) -> str:
 def render_panel(path: Path, state: dict[str, set[str]]) -> None:
     lines = [
         f"__summary__\t目前：{summary(state)}\t",
-        "__help__\t1–0 快速切換｜Space 切換目前項目｜Enter 套用｜Ctrl-R 設定預設｜Esc 取消\t",
+        "__help__\t1–0 快速切換｜未分類：游標＋Space｜Enter 套用｜Ctrl-R 設定預設｜Esc 取消\t",
     ]
     for group, value, group_label, label in OPTIONS:
         if group == "results" and "mistake" not in state["types"]:
