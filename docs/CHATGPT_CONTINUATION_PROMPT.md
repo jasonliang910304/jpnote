@@ -109,7 +109,7 @@ jpnote --version
 
 ## 下一個正確工作項目
 
-Deep Adversarial Audit、v0.7.4 correctness/safety 與 v0.7.5.x releases 都已完成；既有 release tag 不得修改或移動。v0.7.6 dev1/dev2 已 commit/push，dev2 Core #59 全綠；目前 dev3 是 Quiz presentation-only slice：True/False live/history 以 `○／×` 呈現但不改 snapshot，`reorder_4` live/history feedback 以 `before + 【movable】 + after` 顯示完整句，缺 context 時只退回 bracketed answer。下一步再處理 history export/delete 或 hanging-indent UI，不重做已完成的廣域 audit。
+Deep Adversarial Audit、v0.7.4 correctness/safety 與 v0.7.5.x releases 都已完成；既有 release tag 不得修改或移動。v0.7.6 dev1–dev3 已 commit/push 且對應 Core CI 綠；目前 dev4 修正共用 terminal section hanging-indent wrapping：numbered meanings、numbered examples、indented translations/notes 的 continuation 必須保留與 prefix 對齊的縮排，不做 grammar-only workaround。下一個主要 correctness/UI backlog 是 Quiz history export/delete 與剩餘一般 UX，不重做已完成的廣域 audit。
 
 後續固定排程：
 

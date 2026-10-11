@@ -6,6 +6,7 @@ from unittest.mock import patch
 from jpnote_app import ui_fzf
 from jpnote_app.terminal_style import configure
 from jpnote_app.presentation import (
+    _wrap_hanging_line,
     display_width,
     render_attempt,
     render_attempt_summary,
@@ -43,6 +44,89 @@ class PresentationTests(unittest.TestCase):
         self.assertIn("意思／用法", text)
         self.assertIn("相關文法", text)
         self.assertNotIn("\n\n\n", text)
+
+
+    def test_hanging_wrapper_aligns_numbered_continuations_by_cell_width(self) -> None:
+        lines = _wrap_hanging_line(
+            "12. 這是一段需要換行而且續行必須對齊正文起點的很長說明文字。",
+            24,
+        )
+        self.assertGreater(len(lines), 1)
+        self.assertTrue(lines[0].startswith("12. "))
+        self.assertTrue(all(line.startswith("    ") for line in lines[1:]))
+        self.assertTrue(all(not line.startswith("12. ") for line in lines[1:]))
+
+    def test_hanging_wrapper_preserves_existing_indent_on_every_line(self) -> None:
+        lines = _wrap_hanging_line(
+            "   這是一段縮排後仍然很長、需要跨越多行顯示的翻譯內容。",
+            22,
+        )
+        self.assertGreater(len(lines), 1)
+        self.assertTrue(all(line.startswith("   ") for line in lines))
+
+    def test_entry_numbered_meanings_and_examples_share_hanging_renderer(self) -> None:
+        text = render_entry(
+            {
+                "key": "grammar:test-hanging",
+                "type": "grammar",
+                "display": "～テスト",
+                "level": "N3",
+                "aliases": [],
+                "senses": [
+                    {
+                        "meaning": (
+                            "第一個意思非常長，用來確認編號後的正文換行時，"
+                            "續行不會跑回區塊最左側。"
+                        ),
+                        "example_ja": (
+                            "この例文はとても長いので、狭い端末では必ず複数行に"
+                            "折り返されます。"
+                        ),
+                        "example_zh": (
+                            "這個中文翻譯也故意寫得很長，用來確認原有縮排會在"
+                            "後續換行持續保留。"
+                        ),
+                    },
+                    {
+                        "meaning": (
+                            "第二個意思同樣夠長，用來確認下一個編號項目也採用"
+                            "相同的懸掛縮排規則。"
+                        ),
+                        "example_ja": "二つ目の例文も十分に長くして折り返しを確認します。",
+                        "example_zh": "第二個例句翻譯同樣用來確認一致的排版。",
+                    },
+                ],
+                "related_grammar": [],
+                "sources": [],
+                "attempt_stats": {},
+            },
+            width=32,
+        )
+        lines = text.splitlines()
+
+        first_meaning = next(i for i, line in enumerate(lines) if line.startswith("  1. "))
+        second_meaning = next(i for i, line in enumerate(lines) if line.startswith("  2. "))
+        self.assertGreater(second_meaning, first_meaning + 1)
+        self.assertTrue(
+            all(
+                line.startswith("     ")
+                for line in lines[first_meaning + 1 : second_meaning]
+                if line
+            )
+        )
+
+        example_title = lines.index("例句")
+        first_example = next(
+            i for i in range(example_title + 1, len(lines))
+            if lines[i].startswith("  1. ")
+        )
+        self.assertTrue(lines[first_example + 1].startswith("     "))
+        self.assertTrue(
+            any(
+                line.startswith("     這個中文翻譯")
+                for line in lines[first_example + 1 :]
+            )
+        )
 
     def test_attempt_shows_missing_answer_without_guessing(self) -> None:
         text = render_attempt({

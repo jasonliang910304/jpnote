@@ -106,6 +106,38 @@ def wrap_text(text: str, width: int) -> list[str]:
     return result
 
 
+_NUMBERED_PREFIX_RE = re.compile(r"^(?P<prefix>\s*\d+\.\s+)(?P<body>.*)$")
+_LEADING_INDENT_RE = re.compile(r"^(?P<prefix>\s+)(?P<body>\S.*)$")
+
+
+def _wrap_hanging_line(text: str, width: int) -> list[str]:
+    """Wrap one section-body line while preserving layout prefixes.
+
+    Numbered rows such as ``12. ...`` keep their continuation aligned with the
+    text after the number. Already-indented rows (for example translated
+    example lines or relation notes) keep the same indentation on every
+    continuation line. Width is measured in terminal cells, so multi-digit
+    numbering does not rely on a fixed ASCII indent.
+    """
+    raw = str(text)
+    numbered = _NUMBERED_PREFIX_RE.match(raw)
+    indented = _LEADING_INDENT_RE.match(raw) if numbered is None else None
+    match = numbered or indented
+    if match is None:
+        return _wrap_line(raw, width)
+
+    prefix = match.group("prefix")
+    body = match.group("body")
+    prefix_width = display_width(prefix)
+    content_width = max(1, width - prefix_width)
+    pieces = _wrap_line(body, content_width)
+    continuation = " " * prefix_width
+    return [
+        prefix + pieces[0],
+        *(continuation + piece for piece in pieces[1:]),
+    ]
+
+
 def _right_badge(primary: str, badge: str, width: int) -> list[str]:
     if not badge:
         return wrap_text(primary, width)
@@ -185,7 +217,7 @@ def _section(
         if line == "":
             body.append("  ")
             continue
-        wrapped = wrap_text(line, body_width)
+        wrapped = _wrap_hanging_line(line, body_width)
         for piece in wrapped:
             rendered = piece
             if body_tone:

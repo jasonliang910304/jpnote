@@ -3,7 +3,7 @@
 最後更新：2026-10-12（Asia/Taipei）
 正式 release/tag：`jpnote v0.7.5.3`；annotated tag object `982fe761f1148196838cfc1b4a669d36f8baf438` 固定指向 release commit `8e4e17d6c48c0f3e31e9ad00bc42f618b542ecae`
 正式安裝版本：`jpnote 0.7.5.3`
-目前開發 checkpoint：v0.7.6 correctness/UI dev3，exact parent=`96260cfc55589d019405b992924a80e2317d546e`（dev2 commit；Core regression #59 全綠，Windows import client 因 path filter 未觸發）。dev3 為 presentation-only Quiz/TUI slice：True/False live/history 畫面以 `○／×` 呈現但不修改 immutable snapshot；`reorder_4` live/history feedback 以 `before + 【movable answer】 + after` 顯示完整句與無色可辨識的 movable segment，context 不可用時 fail-soft 退回 `【answer】`。不改 generator version、core schema v5、Quiz schema v2、public import schema，也沒有 DB login/auth/permission/migration 變更。AI 不修改 GitHub 遠端。
+目前開發 checkpoint：v0.7.6 correctness/UI dev4，exact parent=`c0dedf17f3319125899640e7eef2e6abf95fd5fa`（dev3 commit；Core regression #60 Python 3.10/3.13 全綠，Windows import client 因 path filter 未觸發）。dev4 修正共用 terminal presentation section wrapping：numbered row 依實際 prefix cell width 使用 hanging indent；原本已有 leading indentation 的行在所有 continuation line 保持相同縮排。因此 grammar「意思／用法」、多例句日文／中文與相關文法 note 等共用 `_section()` 的長內容一致修正，不做單畫面特判。core schema v5、Quiz schema v2、public import schema 不變；沒有 DB login/auth/permission/migration 變更。AI 不修改 GitHub 遠端。
 
 用途：讓新的 ChatGPT 對話或新的開發工作階段，不依賴舊聊天內容也能直接接續工作。
 
