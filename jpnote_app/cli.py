@@ -331,7 +331,11 @@ def _interactive_resolve_warnings(plan: Any, *, file: Any = None) -> tuple[Any |
                 file=output,
             )
         print("選擇：", end="", file=output, flush=True)
-        answer = input().strip().lower()
+        try:
+            answer = input().strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print("", file=output)
+            return None, False
         if answer == "x":
             return None, False
         if answer == "k":
@@ -366,6 +370,27 @@ def _interactive_resolve_warnings(plan: Any, *, file: Any = None) -> tuple[Any |
 def _confirm_yes_no(prompt: str) -> bool:
     print(prompt, end="", flush=True)
     answer = input().strip().lower()
+    return answer in {"y", "yes"}
+
+
+def _confirm_precommit_yes_no(
+    prompt: str,
+    *,
+    file: Any = None,
+) -> bool | None:
+    """Return True/False, or None when a pre-commit prompt is interrupted.
+
+    This helper is intentionally limited to the read-only/pre-commit import
+    phase. Mutation-time KeyboardInterrupt handling stays with the existing
+    transaction/post-commit safety boundary instead of being globally hidden.
+    """
+    output = sys.stdout if file is None else file
+    print(prompt, end="", file=output, flush=True)
+    try:
+        answer = input().strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print("", file=output)
+        return None
     return answer in {"y", "yes"}
 
 
@@ -589,7 +614,14 @@ def _run_import_text(
                 "或先使用 --check --all 檢視。"
             )
         else:
-            apply_fixes = _confirm_yes_no("是否先套用安全修正並重新檢查？[y/N] ")
+            decision = _confirm_precommit_yes_no(
+                "是否先套用安全修正並重新檢查？[y/N] ",
+                file=warning_stream,
+            )
+            if decision is None:
+                print("已取消，未修改資料庫。", file=warning_stream)
+                return 0
+            apply_fixes = decision
         if apply_fixes:
             with connect_preflight() as conn:
                 selected, fix_actions = apply_safe_import_fixes(conn, selected)
@@ -622,7 +654,14 @@ def _run_import_text(
             if args.yes:
                 apply_fixes = True
             else:
-                apply_fixes = _confirm_yes_no("是否套用處理重複項目後新發現的安全修正？[y/N] ")
+                decision = _confirm_precommit_yes_no(
+                    "是否套用處理重複項目後新發現的安全修正？[y/N] ",
+                    file=warning_stream,
+                )
+                if decision is None:
+                    print("已取消，未修改資料庫。", file=warning_stream)
+                    return 0
+                apply_fixes = decision
             if apply_fixes:
                 with connect_preflight() as conn:
                     selected, fix_actions = apply_safe_import_fixes(conn, selected)
@@ -651,7 +690,11 @@ def _run_import_text(
             raise RuntimeError(
                 "非互動正式匯入需要 --yes；此選項只略過確認，不會略過 validation 或完整 preflight。"
             )
-        if not _confirm_yes_no("是否正式匯入？[y/N] "):
+        confirmed = _confirm_precommit_yes_no(
+            "是否正式匯入？[y/N] ",
+            file=warning_stream,
+        )
+        if not confirmed:
             print("已取消，未修改資料庫。", file=warning_stream)
             return 0
 

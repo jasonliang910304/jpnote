@@ -98,6 +98,8 @@ jpnote quiz
 2. 中文 → 日文四選一
 3. 日文 ↔ 中文意思是非題
 4. 日文 ↔ reading 是非題
+   - 實際題幹使用的 vocabulary `display` 必須含漢字；純平假名／片假名／長音／符號的 display 不生成 reading 題，避免題幹直接揭露讀音。
+   - 即使 aliases 另有漢字寫法，也不得在沒有明確安全 prompt-selection 規則時偷偷替換 display。
 5. 讀音陷阱是非題
    - 長音
    - 促音 `っ`

@@ -220,9 +220,40 @@ class QuizPhase3GeneratorTests(unittest.TestCase):
         )
         self.assertIsNone(question)
 
+    def test_reading_questions_require_kanji_in_actual_display(self):
+        hiragana = vocab(
+            "vocab:けんか",
+            "けんか",
+            "けんか",
+            "吵架",
+            aliases=("喧嘩",),
+        )
+        katakana = vocab(
+            "vocab:コーヒー",
+            "コーヒー",
+            "コーヒー",
+            "咖啡",
+            aliases=("珈琲",),
+        )
+        generator = QuestionGenerator(seed=0)
+
+        self.assertIsNone(
+            generator.vocabulary_reading_true_false(
+                hiragana,
+                prefer_false=False,
+            )
+        )
+        self.assertIsNone(
+            generator.vocabulary_reading_true_false(
+                katakana,
+                prefer_false=True,
+                trap_kind="long_vowel",
+            )
+        )
+
     def test_reading_traps_cover_long_vowel_sokuon_and_nasal(self):
         cases = (
-            (vocab("vocab:コーヒー", "コーヒー", "コーヒー", "咖啡"), "long_vowel", "コヒー"),
+            (vocab("vocab:珈琲", "珈琲", "コーヒー", "咖啡"), "long_vowel", "コヒー"),
             (vocab("vocab:以上", "以上", "いじょう", "以上"), "long_vowel", "いじょ"),
             (vocab("vocab:切手", "切手", "きって", "郵票"), "sokuon", "きて"),
             (vocab("vocab:新聞", "新聞", "しんぶん", "報紙"), "moraic_nasal", "しぶん"),

@@ -507,6 +507,7 @@ class QuestionGenerator:
             source.entry_type != "vocabulary"
             or not source.display.strip()
             or not source.reading.strip()
+            or not _KANJI_RANGE.search(source.display)
         ):
             return None
         make_false = self._random.choice((False, True)) if prefer_false is None else prefer_false

@@ -7,14 +7,15 @@
 1. `docs/PROJECT_HANDOFF.md`
 2. `docs/ROADMAP.md`
 3. `docs/QUIZ_V1_SPEC.md`
-4. `docs/audits/v0.7.5.3-quiz-dynamic-loading-development.md`
-5. `docs/audits/v0.7.5.2-search-fzf-performance.md`
-6. `docs/audits/v0.7.5.1-performance-architecture.md`
-7. `docs/audits/v0.7.5-performance-development.md`
-8. `docs/audits/quiz-development-handoff-2026-07-24.md`
-9. `docs/RELEASE_CHECKLIST.md`
-10. `docs/DELIVERY_GUIDE.md`
-11. README、CHANGELOG、USER_GUIDE
+4. `docs/audits/v0.7.6-correctness-ui-development.md`
+5. `docs/audits/v0.7.5.3-quiz-dynamic-loading-development.md`
+6. `docs/audits/v0.7.5.2-search-fzf-performance.md`
+7. `docs/audits/v0.7.5.1-performance-architecture.md`
+8. `docs/audits/v0.7.5-performance-development.md`
+9. `docs/audits/quiz-development-handoff-2026-07-24.md`
+10. `docs/RELEASE_CHECKLIST.md`
+11. `docs/DELIVERY_GUIDE.md`
+12. README、CHANGELOG、USER_GUIDE
 
 ## 目前基準
 
@@ -108,7 +109,7 @@ jpnote --version
 
 ## 下一個正確工作項目
 
-Deep Adversarial Audit、v0.7.4 correctness/safety、v0.7.5 early-performance、v0.7.5.1 bulk-read/snapshot/parser、v0.7.5.2 search/fzf 與 v0.7.5.3 dynamic Quiz loading/bounded cleanup release 都已完成。不要修改或移動既有 release tag。目前只做 v0.7.5.3 handoff-only docs sync／idempotent artifact cleanup；下一個 runtime checkpoint 直接進 v0.7.6 correctness/UI backlog，不重做已完成的廣域 audit。
+Deep Adversarial Audit、v0.7.4 correctness/safety 與 v0.7.5.x releases 都已完成；既有 release tag 不得修改或移動。v0.7.6 dev1 v2 先完成 kana-only reading eligibility 與 import pre-commit prompt Ctrl+C/EOF graceful cancel；下一個 runtime slice 是 coupled search correctness：`imasu` exact/whole grammar-romaji match 與 core/fzf 一致性必須一起處理，不做只改 core 或只改 fzf 的 workaround。不要重做已完成的廣域 audit。
 
 後續固定排程：
 

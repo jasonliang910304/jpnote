@@ -1,9 +1,9 @@
 # jpnote 專案交接紀錄
 
-最後更新：2026-09-13（Asia/Taipei）
+最後更新：2026-09-25（Asia/Taipei）
 正式 release/tag：`jpnote v0.7.5.3`；annotated tag object `982fe761f1148196838cfc1b4a669d36f8baf438` 固定指向 release commit `8e4e17d6c48c0f3e31e9ad00bc42f618b542ecae`
 正式安裝版本：`jpnote 0.7.5.3`
-目前開發 checkpoint：v0.7.5.3 dynamic Quiz loading/progress＋bounded dead-code cleanup 已正式 release。exact parent=`84697394c6a64629f0a0e97ebaa970f1e1e8e44f`；release commit=`8e4e17d6c48c0f3e31e9ad00bc42f618b542ecae`；annotated tag object=`982fe761f1148196838cfc1b4a669d36f8baf438`。actual Arch 10-stage resume gate、release-commit Core regression、tag-triggered Core 3.10/3.13 與 Windows import client protocol/PowerShell 7/Windows PowerShell 5.1 全 PASS；正式 DB fingerprint 完全不變。現在只做 handoff-only docs sync／artifact cleanup，下一個 runtime checkpoint 為 v0.7.6 correctness/UI。core schema v5、Quiz schema v2、public import schema 不變。AI 不修改 GitHub 遠端。
+目前開發 checkpoint：v0.7.6 correctness/UI dev1 v2，exact parent=`975487af0900a0658f7ca233fd157396307b5cd8`（post-v0.7.5.3 handoff main）。本 slice 同時處理兩個可獨立驗證的 correctness/UX：① vocabulary reading true/false/trap 只有實際 `display` 含漢字才可生成，純假名／片假名即使另有漢字 alias 也不偷偷替換 prompt；② import 在 duplicate 選擇、安全修正確認、最終正式匯入確認等「尚未進 mutation」的互動 prompt 遇 Ctrl+C/EOF 時乾淨取消，不再輸出 Python traceback。mutation／transaction／post-commit KeyboardInterrupt 邊界刻意不做全域攔截。此 slice 不改 generator version、core schema v5、Quiz schema v2 或 public import schema，也沒有 DB login/auth/permission/migration 變更。下一個 search slice 才 coupled 處理 `imasu` core/fzf overmatch。AI 不修改 GitHub 遠端。
 
 用途：讓新的 ChatGPT 對話或新的開發工作階段，不依賴舊聊天內容也能直接接續工作。
 

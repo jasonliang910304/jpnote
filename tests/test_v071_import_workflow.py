@@ -1,20 +1,26 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
 import pytest
 
 from jpnote_app import cli
-from jpnote_app.db import connect, connect_preflight
+from jpnote_app.db import connect, connect_preflight, connect_readonly
 from jpnote_app.import_preflight import build_preflight_report
 from jpnote_app.import_source import ImportSource
-from jpnote_app.services import prepare_import
+from jpnote_app.services import apply_import, prepare_import
 
 
 class _NonInteractiveStdin:
     def isatty(self) -> bool:
         return False
+
+
+class _InteractiveStdin:
+    def isatty(self) -> bool:
+        return True
 
 
 def _cleanup_args(**overrides: object) -> argparse.Namespace:
@@ -203,3 +209,150 @@ def test_locked_import_revalidation_preserves_generated_attempt_identity(
     with connect() as conn:
         result = cli._apply_import_if_preflight_current(conn, selected, approved)
     assert result.added_attempts == 1
+
+@pytest.mark.parametrize("exc_type", (EOFError, KeyboardInterrupt))
+def test_precommit_yes_no_interrupt_returns_none(
+    monkeypatch: pytest.MonkeyPatch,
+    exc_type: type[BaseException],
+) -> None:
+    def interrupted_input() -> str:
+        raise exc_type()
+
+    monkeypatch.setattr("builtins.input", interrupted_input)
+    assert cli._confirm_precommit_yes_no("是否正式匯入？[y/N] ") is None
+
+
+def test_duplicate_prompt_keyboard_interrupt_cancels_before_mutation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv("JPNOTE_DATA_DIR", str(tmp_path / "data"))
+    with connect() as conn:
+        apply_import(
+            conn,
+            prepare_import(
+                conn,
+                {
+                    "items": [{
+                        "key": "vocab:餌",
+                        "type": "vocabulary",
+                        "display": "餌",
+                        "reading": "えさ",
+                        "meanings": ["飼料"],
+                    }]
+                },
+            ),
+        )
+
+    payload = json.dumps(
+        {
+            "items": [{
+                "key": "vocab:えさ",
+                "type": "vocabulary",
+                "display": "えさ",
+                "reading": "えさ",
+                "aliases": ["餌"],
+                "meanings": ["餵動物的食物"],
+            }]
+        },
+        ensure_ascii=False,
+    )
+    args = cli.build_parser().parse_args(["import", "payload.json"])
+    monkeypatch.setattr(cli.sys, "stdin", _InteractiveStdin())
+
+    def interrupted_input() -> str:
+        raise KeyboardInterrupt()
+
+    def forbidden_mutation(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("pre-commit Ctrl+C must not enter execute_safe_mutation")
+
+    monkeypatch.setattr("builtins.input", interrupted_input)
+    monkeypatch.setattr(cli, "execute_safe_mutation", forbidden_mutation)
+
+    assert cli._run_import_text(payload, args) == 0
+    output = capsys.readouterr().out
+    assert "疑似重複" in output
+    assert "已取消，未修改資料庫。" in output
+
+    with connect_readonly() as conn:
+        keys = {
+            row[0]
+            for row in conn.execute(
+                "SELECT key FROM entries WHERE key IN ('vocab:餌', 'vocab:えさ')"
+            )
+        }
+    assert keys == {"vocab:餌"}
+
+
+def test_safe_fix_prompt_keyboard_interrupt_cancels_before_mutation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv("JPNOTE_DATA_DIR", str(tmp_path / "data"))
+    payload = json.dumps(
+        {
+            "items": [{
+                "key": "vocab:猫",
+                "type": "vocabulary",
+                "display": "猫",
+                "reading": "ねこ",
+                "aliases": ["猫"],
+                "meanings": ["貓"],
+            }]
+        },
+        ensure_ascii=False,
+    )
+    args = cli.build_parser().parse_args(["import", "payload.json"])
+    monkeypatch.setattr(cli.sys, "stdin", _InteractiveStdin())
+
+    def interrupted_input() -> str:
+        raise KeyboardInterrupt()
+
+    def forbidden_mutation(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("interrupted safe-fix prompt must not mutate")
+
+    monkeypatch.setattr("builtins.input", interrupted_input)
+    monkeypatch.setattr(cli, "execute_safe_mutation", forbidden_mutation)
+
+    assert cli._run_import_text(payload, args) == 0
+    output = capsys.readouterr().out
+    assert "是否先套用安全修正" in output
+    assert "已取消，未修改資料庫。" in output
+
+
+def test_final_import_prompt_keyboard_interrupt_cancels_before_mutation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv("JPNOTE_DATA_DIR", str(tmp_path / "data"))
+    payload = json.dumps(
+        {
+            "items": [{
+                "key": "vocab:犬",
+                "type": "vocabulary",
+                "display": "犬",
+                "reading": "いぬ",
+                "meanings": ["狗"],
+            }]
+        },
+        ensure_ascii=False,
+    )
+    args = cli.build_parser().parse_args(["import", "payload.json"])
+    monkeypatch.setattr(cli.sys, "stdin", _InteractiveStdin())
+
+    def interrupted_input() -> str:
+        raise KeyboardInterrupt()
+
+    def forbidden_mutation(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("final-confirmation Ctrl+C must not mutate")
+
+    monkeypatch.setattr("builtins.input", interrupted_input)
+    monkeypatch.setattr(cli, "execute_safe_mutation", forbidden_mutation)
+
+    assert cli._run_import_text(payload, args) == 0
+    output = capsys.readouterr().out
+    assert "是否正式匯入？" in output
+    assert "已取消，未修改資料庫。" in output

@@ -1,9 +1,9 @@
 # jpnote 開發路線圖
 
-最後更新：2026-09-13（Asia/Taipei）
+最後更新：2026-09-25（Asia/Taipei）
 正式 release/tag：v0.7.5.3；annotated tag object `982fe761f1148196838cfc1b4a669d36f8baf438` 固定指向 release commit `8e4e17d6c48c0f3e31e9ad00bc42f618b542ecae`
 正式安裝版本：0.7.5.3
-目前開發位置：v0.7.5.3 dynamic Quiz loading/progress＋bounded dead-code cleanup 已正式 release。exact parent=`84697394c6a64629f0a0e97ebaa970f1e1e8e44f`；release commit=`8e4e17d6c48c0f3e31e9ad00bc42f618b542ecae`；annotated tag object=`982fe761f1148196838cfc1b4a669d36f8baf438`。actual Arch gate、release-commit Core、tag-triggered Core 與 Windows import client CI 全 PASS，正式 DB fingerprint 完全不變。v0.7.5.x runtime scope 已收斂；目前只做 handoff-only docs sync／artifact cleanup，下一個 runtime checkpoint 進 v0.7.6。core schema v5、Quiz schema v2、public import schema不變。GitHub 遠端變更一律由使用者親手處理，AI 僅做 read-only GitHub 查詢、隔離修改、測試與 artifact 準備。
+目前開發位置：v0.7.6 correctness/UI dev1 v2，exact parent=`975487af0900a0658f7ca233fd157396307b5cd8`。dev1 同時收斂 Quiz reading 題自洩與 import pre-commit prompt interrupt UX：kana-only display 不生成 reading 題；duplicate/safe-fix/final confirmation 的 Ctrl+C/EOF 乾淨取消且保證尚未進 `execute_safe_mutation()`。不新增 `main()` 全域 KeyboardInterrupt catch，保留 transaction rollback／post-commit export error 的既有語意。search `imasu` overmatch 下一個 slice 必須 core＋fzf coupled 修正。core schema v5、Quiz schema v2、public import schema不變；沒有 DB login/auth/permission/migration 變更。
 
 ## 0.7.2 高優先主軸 — completed
 
@@ -141,7 +141,8 @@ v0.7.5.x runtime scope 已收斂；下一個 runtime checkpoint 直接進 v0.7.6
 - core search 與 interactive fzf 共用同一 matcher/ranker source of truth。
 - Quiz True/False 顯示 `○／×`；`reorder_4` feedback 顯示完整句並高亮 movable portion，保留無色 fallback。
 - 保留並強化現有 kana-prompt homophone guard；基本同音詞安全已存在，不再當作「從零實作」項目。
-- Quiz 讀音題 eligibility guard：canonical/display 若只有平假名／片假名／長音／符號而不含漢字，不產生「讀音是否為～」題；例如 `けんか` 這類 prompt 已直接揭露讀音，沒有學習資訊增益。若只有漢字 alias，未來要拿 alias 當 prompt 必須另有明確且安全的 prompt-selection 規則，不能偷偷替換。
+- Quiz 讀音題 eligibility guard（dev1 v2 implemented）：實際 vocabulary `display` 若只有平假名／片假名／長音／符號而不含漢字，不產生 reading true/false/trap 題；即使只有漢字 alias，也不拿 alias 偷換 prompt。未來若要支援 alias prompt 必須另有明確安全規則。
+- Import pre-commit prompt interruption（dev1 v2 implemented）：duplicate warning 選擇、安全修正確認與最終正式匯入確認遇 Ctrl+C/EOF 時顯示「已取消，未修改資料庫」並正常返回；不吞掉已進 mutation／commit 後的 KeyboardInterrupt。
 - Quiz history export/delete TUI 入口與 history polish。
 - grammar 詳細頁 numbered paragraph hanging indent／長段落 wrapping；同一共用 renderer 也要覆蓋例句等有編號或縮排的長內容，避免編號孤立一行、續行回到最左側。
 - fzf 未分類／mistake level 空值等一般 UX，以及 fuzzy duplicate candidate／確認流程。
