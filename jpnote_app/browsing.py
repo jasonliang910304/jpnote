@@ -6,7 +6,13 @@ import sqlite3
 from typing import Any, Iterable, Sequence
 
 from .repository import get_entry, list_attempts, list_entries_full
-from .search_normalization import attempt_search_metadata, compact_text, entry_match_score, entry_search_metadata
+from .search_normalization import (
+    STRONG_ENTRY_MATCH_MAX_SCORE,
+    attempt_search_metadata,
+    compact_text,
+    entry_match_score,
+    entry_search_metadata,
+)
 
 DEFAULT_TYPES = ("grammar", "vocab")
 ALL_TYPES = DEFAULT_TYPES + ("mistake",)
@@ -75,6 +81,7 @@ def browse_records(
     entry_map = {entry["key"]: entry for entry in full_entries}
 
     records: list[dict[str, Any]] = []
+    entry_records: list[tuple[int | None, dict[str, Any]]] = []
     if selected_types & {"grammar", "vocab"}:
         for full in full_entries:
             kind = _entry_kind(full["type"])
@@ -82,9 +89,10 @@ def browse_records(
                 continue
             if selected_levels and normalize_level_filter(full.get("level", "")) not in selected_levels:
                 continue
-            if query and entry_match_score(full, query) is None:
+            score = entry_match_score(full, query) if query else None
+            if query and score is None:
                 continue
-            records.append({
+            entry_records.append((score, {
                 "record_type": "entry",
                 "kind": kind,
                 "token": f"entry:{full['key']}",
@@ -92,7 +100,23 @@ def browse_records(
                 "level": full.get("level", ""),
                 "search_metadata": entry_search_metadata(full),
                 "data": full,
-            })
+            }))
+
+    has_strong_entry_match = bool(
+        query
+        and any(
+            score is not None and score <= STRONG_ENTRY_MATCH_MAX_SCORE
+            for score, _record in entry_records
+        )
+    )
+    if has_strong_entry_match:
+        return [
+            record
+            for score, record in entry_records
+            if score is not None and score <= STRONG_ENTRY_MATCH_MAX_SCORE
+        ]
+
+    records.extend(record for _score, record in entry_records)
 
     if "mistake" in selected_types:
         attempts = list_attempts(conn, selected_results)

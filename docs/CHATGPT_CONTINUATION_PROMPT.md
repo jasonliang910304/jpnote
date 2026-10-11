@@ -109,7 +109,7 @@ jpnote --version
 
 ## 下一個正確工作項目
 
-Deep Adversarial Audit、v0.7.4 correctness/safety 與 v0.7.5.x releases 都已完成；既有 release tag 不得修改或移動。v0.7.6 dev1 v2 先完成 kana-only reading eligibility 與 import pre-commit prompt Ctrl+C/EOF graceful cancel；下一個 runtime slice 是 coupled search correctness：`imasu` exact/whole grammar-romaji match 與 core/fzf 一致性必須一起處理，不做只改 core 或只改 fzf 的 workaround。不要重做已完成的廣域 audit。
+Deep Adversarial Audit、v0.7.4 correctness/safety 與 v0.7.5.x releases 都已完成；既有 release tag 不得修改或移動。v0.7.6 dev1 已 commit/push 且 Core #58、Windows import client #23 全綠；目前 dev2 coupled 處理 search correctness：core 與 interactive fzf 共用 score 0–6 對應的 strong exact/whole forms，`imasu` 有 strong match 時不得留下 `kimasu/shimasu/arimasu/moraimasu` 等 relaxed suffix overmatch，沒有 strong match 時仍須保留 substring fallback。不要重做已完成的廣域 audit。
 
 後續固定排程：
 

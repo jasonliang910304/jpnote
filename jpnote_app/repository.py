@@ -9,7 +9,7 @@ from typing import Any, Iterable
 
 from .db import now_text
 from .sorting import entry_sort_key
-from .search_normalization import entry_match_score
+from .search_normalization import STRONG_ENTRY_MATCH_MAX_SCORE, entry_match_score
 from .attempt_identity import attempt_identity_signature
 from .data_quality import clean_aliases
 
@@ -78,6 +78,12 @@ def _ranked_full_entries(conn: sqlite3.Connection, query: str) -> list[dict[str,
         score = entry_match_score(entry, query)
         if score is not None:
             ranked.append((score, entry_sort_key(entry), entry))
+    if any(score <= STRONG_ENTRY_MATCH_MAX_SCORE for score, _, _ in ranked):
+        ranked = [
+            value
+            for value in ranked
+            if value[0] <= STRONG_ENTRY_MATCH_MAX_SCORE
+        ]
     ranked.sort(key=lambda value: (value[0], value[1]))
     return [entry for _, _, entry in ranked]
 

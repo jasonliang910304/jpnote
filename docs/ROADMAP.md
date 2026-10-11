@@ -1,9 +1,9 @@
 # jpnote 開發路線圖
 
-最後更新：2026-09-25（Asia/Taipei）
+最後更新：2026-10-12（Asia/Taipei）
 正式 release/tag：v0.7.5.3；annotated tag object `982fe761f1148196838cfc1b4a669d36f8baf438` 固定指向 release commit `8e4e17d6c48c0f3e31e9ad00bc42f618b542ecae`
 正式安裝版本：0.7.5.3
-目前開發位置：v0.7.6 correctness/UI dev1 v2，exact parent=`975487af0900a0658f7ca233fd157396307b5cd8`。dev1 同時收斂 Quiz reading 題自洩與 import pre-commit prompt interrupt UX：kana-only display 不生成 reading 題；duplicate/safe-fix/final confirmation 的 Ctrl+C/EOF 乾淨取消且保證尚未進 `execute_safe_mutation()`。不新增 `main()` 全域 KeyboardInterrupt catch，保留 transaction rollback／post-commit export error 的既有語意。search `imasu` overmatch 下一個 slice 必須 core＋fzf coupled 修正。core schema v5、Quiz schema v2、public import schema不變；沒有 DB login/auth/permission/migration 變更。
+目前開發位置：v0.7.6 correctness/UI dev2，exact parent=`9c3af9f5ad3e5c17819728257dbbad7f6c9db4b5`。dev1（kana-only reading eligibility + import pre-commit Ctrl+C/EOF graceful cancel）已 commit/push 且 Core #58、Windows import client #23 全綠；dev2 coupled 修正 core/fzf strong-match preference，目標是 `imasu` 有 exact/whole grammar-romaji match 時不再顯示純 suffix substring overmatch，而不存在 strong match 時仍保留 relaxed substring fallback。core schema v5、Quiz schema v2、public import schema不變；沒有 DB login/auth/permission/migration 變更。
 
 ## 0.7.2 高優先主軸 — completed
 
@@ -138,7 +138,7 @@ v0.7.5.x runtime scope 已收斂；下一個 runtime checkpoint 直接進 v0.7.6
 ## v0.7.6 — Search + Quiz/UI correctness
 
 - grammar derived-romaji ranking：`imasu` 不再因 substring 大量命中 `kimasu/shimasu/arimasu/moraimasu`；exact/whole variant 優先。
-- core search 與 interactive fzf 共用同一 matcher/ranker source of truth。
+- core search 與 interactive fzf 共用同一 exact/whole strong-match source of truth（dev2 implemented candidate）：score 0–6 的 key/display/reading/alias/romaji/derived-romaji forms 為 strong；候選中有 strong 時壓掉 relaxed substring overmatch，沒有 strong 時維持原 fallback。
 - Quiz True/False 顯示 `○／×`；`reorder_4` feedback 顯示完整句並高亮 movable portion，保留無色 fallback。
 - 保留並強化現有 kana-prompt homophone guard；基本同音詞安全已存在，不再當作「從零實作」項目。
 - Quiz 讀音題 eligibility guard（dev1 v2 implemented）：實際 vocabulary `display` 若只有平假名／片假名／長音／符號而不含漢字，不產生 reading true/false/trap 題；即使只有漢字 alias，也不拿 alias 偷換 prompt。未來若要支援 alias prompt 必須另有明確安全規則。

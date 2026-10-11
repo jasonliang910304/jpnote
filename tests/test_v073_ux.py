@@ -166,6 +166,30 @@ def test_grammar_search_derives_romaji_only_from_reliable_kana(
                             "meanings": ["正在～"],
                         },
                         {
+                            "key": "grammar:きます",
+                            "type": "grammar",
+                            "display": "きます",
+                            "meanings": ["來（禮貌形）"],
+                        },
+                        {
+                            "key": "grammar:します",
+                            "type": "grammar",
+                            "display": "します",
+                            "meanings": ["做（禮貌形）"],
+                        },
+                        {
+                            "key": "grammar:あります",
+                            "type": "grammar",
+                            "display": "あります",
+                            "meanings": ["有／存在（禮貌形）"],
+                        },
+                        {
+                            "key": "grammar:もらいます",
+                            "type": "grammar",
+                            "display": "もらいます",
+                            "meanings": ["得到（禮貌形）"],
+                        },
+                        {
                             "key": "grammar:場合",
                             "type": "grammar",
                             "display": "～場合",
@@ -189,10 +213,21 @@ def test_grammar_search_derives_romaji_only_from_reliable_kana(
             ),
         )
 
-        assert search_entries(conn, "imasu")[0]["key"] == "grammar:いる/います"
+        assert [entry["key"] for entry in search_entries(conn, "imasu")] == [
+            "grammar:いる/います"
+        ]
         assert search_entries(conn, "teiru")[0]["key"] == "grammar:Vている"
         browse = browse_records(conn, types=("grammar",), query="imasu")
         assert [record["key"] for record in browse] == ["grammar:いる/います"]
+
+        partial_keys = {entry["key"] for entry in search_entries(conn, "imas")}
+        assert {
+            "grammar:いる/います",
+            "grammar:きます",
+            "grammar:します",
+            "grammar:あります",
+            "grammar:もらいます",
+        }.issubset(partial_keys)
 
         baai_keys = {entry["key"] for entry in search_entries(conn, "baai")}
         assert "grammar:場合かな" in baai_keys

@@ -147,3 +147,53 @@ def test_entry_match_score_reuses_variant_sets_when_falling_through_to_metadata(
     # Before v0.7.5.2 both sets were rebuilt by entry_search_metadata() after
     # already being computed for relaxed-romaji scoring.
     assert counts == {"romaji": 1, "grammar": 1}
+
+def test_fzf_global_strong_match_suppresses_romaji_suffix_overmatches(
+    tmp_path: Path,
+) -> None:
+    raw_lines = [
+        "entry:grammar:いる/います\t[文法] いる／います\timasu i ru",
+        "entry:grammar:きます\t[文法] きます\tkimasu",
+        "entry:grammar:します\t[文法] します\tshimasu",
+        "entry:grammar:あります\t[文法] あります\tarimasu",
+        "entry:grammar:もらいます\t[文法] もらいます\tmoraimasu",
+    ]
+    strong_terms = [
+        ("imasu", "iru"),
+        ("kimasu",),
+        ("shimasu",),
+        ("arimasu",),
+        ("moraimasu",),
+    ]
+    dataset = tmp_path / "records.tsv"
+    dataset.write_text(
+        "\n".join(
+            helper.append_search_index(
+                line + "\t" + helper.strong_search_index_field(terms)
+            )
+            for line, terms in zip(raw_lines, strong_terms, strict=True)
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    assert _filter_output(dataset, "imasu") == raw_lines[0] + "\n"
+
+    partial = _filter_output(dataset, "imas")
+    assert partial == "".join(line + "\n" for line in raw_lines)
+
+
+def test_strong_index_accepts_spaced_and_compact_romaji_equivalently(
+    tmp_path: Path,
+) -> None:
+    raw = "entry:vocab:奇跡\t[單字] 奇跡\tki se ki"
+    dataset = tmp_path / "records.tsv"
+    dataset.write_text(
+        helper.append_search_index(
+            raw + "\t" + helper.strong_search_index_field(("ki se ki",))
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    assert _filter_output(dataset, "ki se ki") == raw + "\n"
+    assert _filter_output(dataset, "kiseki") == raw + "\n"

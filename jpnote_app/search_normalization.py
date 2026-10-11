@@ -30,6 +30,11 @@ _MACRON_OPTIONS = {
 }
 _MACRON_BASE = str.maketrans({"ā": "a", "ī": "i", "ū": "u", "ē": "e", "ō": "o"})
 
+# Scores 0–6 are exact/whole-form matches. Higher scores are deliberately
+# relaxed substring/metadata matches and should only survive when no stronger
+# candidate exists in the current result set.
+STRONG_ENTRY_MATCH_MAX_SCORE = 6
+
 
 
 def compact_romaji(value: str, *, keep_macrons: bool = False) -> str:
@@ -121,6 +126,29 @@ def grammar_romaji_variants(entry: dict[str, Any]) -> set[str]:
                         romaji_variants(" ".join(romanized_runs[start:stop]))
                     )
     return {value for value in variants if value}
+
+
+def entry_strong_search_terms(entry: dict[str, Any]) -> tuple[str, ...]:
+    """Return query-independent forms corresponding to match-score tiers 0–6.
+
+    fzf precomputes these once into its hidden dataset. Keeping the exact/whole
+    forms here means core search and interactive reload share the same notion of
+    a strong entry match without making the lightweight fzf helper rebuild
+    romaji variants on every keystroke.
+    """
+    values: list[str] = []
+    for field in ("key", "display", "reading", "romaji"):
+        value = str(entry.get(field) or "").strip()
+        if value:
+            values.append(value)
+    values.extend(
+        str(value).strip()
+        for value in entry.get("aliases", [])
+        if str(value).strip()
+    )
+    values.extend(sorted(romaji_variants(str(entry.get("romaji") or ""))))
+    values.extend(sorted(grammar_romaji_variants(entry)))
+    return tuple(dict.fromkeys(value for value in values if value))
 
 
 def entry_search_metadata(

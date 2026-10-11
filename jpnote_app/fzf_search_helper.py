@@ -12,6 +12,7 @@ substring checks; legacy/unindexed rows retain the old normalization fallback.
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -19,10 +20,45 @@ from .search_text import compact_folded_text, compact_text, fold_text
 
 
 _INDEX_PREFIX = "__jpnote_search_index_v1__:"
+_STRONG_PREFIX = "__jpnote_strong_index_v1__:"
+
+
+def strong_search_index_field(values: object) -> str:
+    """Encode normalized exact/whole terms once when the fzf dataset is built."""
+    raw_terms: set[str] = set()
+    compact_terms: set[str] = set()
+    for value in values:
+        folded = fold_text(str(value))
+        if not folded:
+            continue
+        raw_terms.add(folded)
+        compact = compact_folded_text(folded)
+        if compact:
+            compact_terms.add(compact)
+    payload = [sorted(raw_terms), sorted(compact_terms)]
+    return _STRONG_PREFIX + json.dumps(
+        payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+
+
+def split_strong_search_index(line: str) -> tuple[str, str | None]:
+    """Return the ordinary row and optional hidden strong-index field."""
+    raw = line.rstrip("\n")
+    parts = raw.split("\t")
+    if parts and parts[-1].startswith(_STRONG_PREFIX):
+        return "\t".join(parts[:-1]), parts[-1]
+    return raw, None
+
+
+def strip_strong_search_index(line: str) -> str:
+    return split_strong_search_index(line)[0]
 
 
 def _searchable_fields(line: str) -> str:
-    parts = line.rstrip("\n").split("\t")
+    raw, _strong = split_strong_search_index(line)
+    parts = raw.split("\t")
     if len(parts) >= 4:
         # token | preview_path | visible | metadata
         values = (parts[0], parts[2], parts[3])
@@ -62,6 +98,24 @@ def _indexed_parts(line: str) -> tuple[str, str, str] | None:
     return None
 
 
+def _matches_strong(line: str, raw_query: str, compact_query: str) -> bool:
+    indexed = _indexed_parts(line)
+    raw_line = indexed[0] if indexed is not None else line.rstrip("\n")
+    _base, strong_field = split_strong_search_index(raw_line)
+    if strong_field is None:
+        return False
+    try:
+        raw_terms, compact_terms = json.loads(
+            strong_field[len(_STRONG_PREFIX):]
+        )
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return False
+    return bool(
+        (raw_query and raw_query in raw_terms)
+        or (compact_query and compact_query in compact_terms)
+    )
+
+
 def _matches_normalized(line: str, raw_query: str, compact_query: str) -> bool:
     indexed = _indexed_parts(line)
     if indexed is None:
@@ -88,12 +142,25 @@ def matches(line: str, query: str) -> bool:
 def filter_file(path: Path, query: str) -> int:
     raw_query = fold_text(query) if query else ""
     compact_query = compact_folded_text(raw_query) if raw_query else ""
+    matched: list[tuple[str, bool]] = []
+    has_strong_match = False
     with path.open("r", encoding="utf-8") as handle:
         for line in handle:
             indexed = _indexed_parts(line)
             raw_line = indexed[0] if indexed is not None else line.rstrip("\n")
-            if not query or _matches_normalized(line, raw_query, compact_query):
-                sys.stdout.write(raw_line + "\n")
+            visible_line = strip_strong_search_index(raw_line)
+            if not query:
+                matched.append((visible_line, False))
+                continue
+            strong = _matches_strong(line, raw_query, compact_query)
+            if strong:
+                has_strong_match = True
+            if strong or _matches_normalized(line, raw_query, compact_query):
+                matched.append((visible_line, strong))
+
+    for raw_line, strong in matched:
+        if not has_strong_match or strong:
+            sys.stdout.write(raw_line + "\n")
     return 0
 
 

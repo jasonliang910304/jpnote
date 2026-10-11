@@ -17,9 +17,18 @@ from typing import Any, Iterable
 
 from .browsing import DEFAULT_TYPES, LEVEL_VALUES, RESULT_VALUES, TYPE_LABELS
 from .fzf_filter_helper import SHORTCUT_TOKENS, read_state, render_panel, summary as _panel_summary, write_state
-from .fzf_search_helper import append_search_index
+from .fzf_search_helper import (
+    append_search_index,
+    split_strong_search_index,
+    strong_search_index_field,
+    strip_strong_search_index,
+)
 from .presentation import render_attempt, render_entry, render_recent_detail
-from .search_normalization import attempt_search_metadata, entry_search_metadata
+from .search_normalization import (
+    attempt_search_metadata,
+    entry_search_metadata,
+    entry_strong_search_terms,
+)
 from .terminal_style import enabled as color_enabled, style, tone
 
 
@@ -46,8 +55,18 @@ def _machine_token(value: str) -> str:
     return token
 
 
-def _line(token: str, visible: str, metadata: str = "") -> str:
-    return f"{_machine_token(token)}\t{_one_line(visible)}\t{_one_line(metadata)}"
+def _line(
+    token: str,
+    visible: str,
+    metadata: str = "",
+    *,
+    strong_terms: Iterable[str] = (),
+) -> str:
+    base = f"{_machine_token(token)}\t{_one_line(visible)}\t{_one_line(metadata)}"
+    terms = tuple(str(value) for value in strong_terms if str(value))
+    if not terms:
+        return base
+    return f"{base}\t{strong_search_index_field(terms)}"
 
 
 def _isolated_module_command(module: str) -> str:
@@ -96,10 +115,14 @@ def _execute(
         rendered: list[str] = []
         if previews is not None:
             for index, line in enumerate(lines):
-                token, visible, metadata = (line.split("\t", 2) + [""])[:3]
+                base_line, strong_field = split_strong_search_index(line)
+                token, visible, metadata = (base_line.split("\t", 2) + [""])[:3]
                 preview_path = root / f"{index}.txt"
                 preview_path.write_text(previews.get(token, ""), encoding="utf-8")
-                rendered.append(f"{token}\t{preview_path}\t{visible}\t{metadata}")
+                row = f"{token}\t{preview_path}\t{visible}\t{metadata}"
+                if strong_field is not None:
+                    row += f"\t{strong_field}"
+                rendered.append(row)
         else:
             rendered = list(lines)
 
@@ -142,7 +165,7 @@ def _execute(
 
         return subprocess.run(
             command,
-            input="\n".join(rendered),
+            input="\n".join(strip_strong_search_index(line) for line in rendered),
             text=True,
             capture_output=True,
             check=False,
@@ -223,7 +246,12 @@ def select_import(plan: dict[str, Any]) -> tuple[set[str], set[int]]:
             f"{suggested} {tone(f'[{label}]', _type_tone(item['type']), bold=True)} "
             f"{style(item['display'], 'bold')}  {details}"
         ).rstrip()
-        lines.append(_line(f"item:{item['key']}", visible, entry_search_metadata(item)))
+        lines.append(_line(
+            f"item:{item['key']}",
+            visible,
+            entry_search_metadata(item),
+            strong_terms=entry_strong_search_terms(item),
+        ))
     for index, attempt in enumerate(plan.get("attempts", [])):
         result_label = "錯題" if attempt["result"] in {"wrong", "partial"} else "作答"
         title = "｜".join(
@@ -267,7 +295,12 @@ def select_entry(entries: list[dict[str, Any]], prompt: str) -> str | None:
             f"{tone(f'[{label}]', _type_tone(entry['type']), bold=True)} "
             f"{style(entry['display'], 'bold')}  {details}"
         ).rstrip()
-        lines.append(_line(entry["key"], visible, entry_search_metadata(entry)))
+        lines.append(_line(
+            entry["key"],
+            visible,
+            entry_search_metadata(entry),
+            strong_terms=entry_strong_search_terms(entry),
+        ))
     previews = {entry["key"]: render_entry(entry, width=60) for entry in entries}
     tokens = _run(lines, prompt, multi=False, previews=previews)
     return tokens[0] if tokens else None
@@ -324,7 +357,12 @@ def select_recent(entries: list[dict[str, Any]], prompt: str = "選擇近期變�
             f"{tone(f'[{label}]', _type_tone(entry['type']), bold=True)} "
             f"{style(entry['display'], 'bold')}  {details}  {time_text}  {source_text}"
         ).rstrip()
-        lines.append(_line(entry["key"], visible, entry_search_metadata(entry)))
+        lines.append(_line(
+            entry["key"],
+            visible,
+            entry_search_metadata(entry),
+            strong_terms=entry_strong_search_terms(entry),
+        ))
     previews = {
         entry["key"]: render_recent_detail(entry, width=60) + "\n\n" + render_entry(entry, width=60)
         for entry in entries
@@ -383,7 +421,17 @@ def select_browse(
     previews: dict[str, str] = {}
     for record in records:
         token = record["token"]
-        lines.append(_line(token, _browse_visible(record), record.get("search_metadata", "")))
+        strong_terms = (
+            entry_strong_search_terms(record["data"])
+            if record["record_type"] == "entry"
+            else ()
+        )
+        lines.append(_line(
+            token,
+            _browse_visible(record),
+            record.get("search_metadata", ""),
+            strong_terms=strong_terms,
+        ))
         if record["record_type"] == "entry":
             previews[token] = render_entry(record["data"], width=60)
         else:
